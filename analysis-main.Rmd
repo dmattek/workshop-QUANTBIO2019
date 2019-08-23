@@ -1,0 +1,670 @@
+---
+title: "Analysis of ERK dynamics in response to EGF/NGF/FGF2 stimulations"
+author: "Maciej Dobrzyński"
+email: maciej.dobrzynski@izb.unibe.ch
+date: "September 15, 2019"
+output: 
+  html_document:
+    toc: yes
+  html_notebook:
+    theme: united
+    toc: yes
+---
+
+This is an R notebook accompanying the [workshop](https://quantbio2019.epfl.ch) *QUANTITATIVE BIOLOGY: BRIDGING THE GAP BETWEEN COMPUTATIONAL AND EXPERIMENTAL APPROACHES (EPFL – ETHZ SUMMER SCHOOL 2019) QUANTBIO2019*.
+
+In this analysis we will use following R packages:
+
+```{r}
+# load packages
+
+require(data.table, quietly = T)  # for fast processing of large datasets
+require(readxl, quietly = T)      # to read Excel files
+require(R.utils, quietly = T)     # to read compressed files directly without unzipping
+
+require(imputeTS, quietly = T)    # for data imputation
+
+require(ggplot2, quietly = T)     # to make amazing plots
+require(plotly, quietly = T)      # to make the amazing plots interactive
+require(gplots, quietly = T)      # for plotting heatmaps from clustering
+require(RColorBrewer, quietly = T) # for nice color palettes
+```
+
+Set some global variables with parameters of the analysis:
+
+```{r}
+# set some global variables
+
+lPar = list(
+  dirRoot = ".",
+  dirData = "data",
+  freqAcq = 2 # acquisition frequency in minutes
+  
+)
+
+```
+
+# Data description
+
+Data come from a microfluidic experiment where PC-12 cells were stimulated with 3 different growth factors (EGF, NGF, FGF2) at different concentrations. It is part of a study *Temporal perturbation of Erk dynamics reveals network architecture of FGF2-MAPK signaling*, (2019) available [here](https://doi.org/10.1101/629287).
+
+The microfluidic device has four separate channels, thus 4 different tretaments can be performed in a single experiment. 
+
+The PC-12 cells express a FRET biosensor to indicate activity of the ERK kinase, an end point of the MAPK singnalling pathway. Three different growth factors tested activate different parts of the MAPK network and result in different signalling dynamics, i.e. the behavior of ERK activity over time. 
+
+Cells stimulated with growth factors were then imaged with a single-cell resolution over 3-4 hours at a 2-minute time resolution. Each channel of a microfluidic device was imaged at 4 different fields of view. Thus, we have 16 fields of view per experiment.
+
+The folder `data` contains 3 sets of files that correspond to 3 growth factor treatments at 4 different concentrations. A single set from a single experiment includes:
+
+`tCoursesSelected_xGFsust_expXXXX.csv.gz` a compressed file with single-cell data. Each row corresponds to the measurement of ERK activity in a single cell, at a single time point. Columns:
+
+- `Metadata_Series` an integer, 0-15, that corresponds to the field of view.
+- `Metadata_T` an integer, 0-100, corresponds to the time frame number in a movie from a single field of view.
+- `TrackObjects_Label` an integer that describes the track number from object tracking algorithm. The number is unique inly within a single field of view.
+- `Intensity_MeanIntensity_Ratio` a float with the measurement of FRET ratio; this is our proxy of ERK activity.
+
+
+`experimentDescription_EGFsust.xlsx` an Excel file with experiment description. Columns:
+
+- `Position` an integer, 0-15, with the number of the field of view.
+- `Channel` an integer, 1-4, with the number of the microfluidic channel.
+- `Stim_Conc` a string with an indication of the GF ocncentration.
+
+
+# Load data
+
+The aim is to load 3 files that correspond to 3 GF treatments and to combine them into a single `data.table` object that includes info about the experiment.
+
+## Brute-force way
+
+Since we only have 3 files we can just load data as 3 separate variable and concatenate them later.
+
+```{r}
+# Load individual files 
+dtEGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_EGFsust_exp20170316.csv.gz"))
+dtFGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_FGFsust_exp20170224.csv.gz"))
+dtNGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_NGFsust_exp20170725.csv.gz"))
+```
+
+A quick peek into one of the tables reveals the content. There is no info about the experiment, nor the treatment.
+
+```{r}
+head(dtEGF)
+```
+
+All experimental data is in sepearate Excel files that we have to read as well.
+
+```{r}
+dtEGFexp = as.data.table(read_xlsx(file.path(lPar$dirRoot, lPar$dirData, "original/experimentDescription_EGFsust.xlsx")))
+dtFGFexp = as.data.table(read_xlsx(file.path(lPar$dirRoot, lPar$dirData, "original/experimentDescription_FGFsust.xlsx")))
+dtNGFexp = as.data.table(read_xlsx(file.path(lPar$dirRoot, lPar$dirData, "original/experimentDescription_NGFsust.xlsx")))
+
+head(dtEGFexp)
+```
+
+We have to merge experimental data with experiment description. The single-cell data stored in `dtXGF` contains only information about the field of view in a column `Metadata_Series`. Experimental data in `dtXGFexp` contains the information about the treatment for every field of view from the `Position` column. The merge operation will assign experiemntal description for every row in `dtXGF` by matching the field of view. As a result, the `dtXGF` will be expanded with additional columns with a description of the treatment.
+
+**Note:** we will use only some columns from the experimental description. 
+
+```{r}
+# columns tha we want from experimental description files
+vsExpDescrCols = c("Position", "Channel", "Stim_Conc", "Stim_Treat")
+
+# merge data
+dtEGF = merge(dtEGF, dtEGFexp[, ..vsExpDescrCols], by.x = c("Metadata_Series"), by.y = "Position")
+dtFGF = merge(dtFGF, dtFGFexp[, ..vsExpDescrCols], by.x = c("Metadata_Series"), by.y = "Position")
+dtNGF = merge(dtNGF, dtNGFexp[, ..vsExpDescrCols], by.x = c("Metadata_Series"), by.y = "Position")
+
+head(dtEGF)
+
+```
+
+Now, with 3 experimental results loaded and merged with experimental data, we can make a single data object. We will just "put" one dataset after another in a row-bind operation using `rbindlist` function.
+
+```{r error=TRUE}
+# let's make a list of our data tables
+lData = list(EGF = dtEGF, FGF = dtFGF, NGF = dtNGF)
+
+# clean unnecessary objects
+rm(dtEGF, dtFGF, dtNGF)
+rm(dtEGFexp, dtFGFexp, dtNGFexp)
+
+# let's bind it:
+dtAll = rbindlist(lData)
+```
+
+*Side note*: since we created a **named** list `lData` with 3 data tables, we can now access list elements by reference instead of an index, e.g.:
+
+```{r}
+head(lData[["NGF"]])
+```
+
+The row-bind operation produced an error because one of the tables has a different number of columns from the rest. So, what gives?
+
+```{r}
+# extract column names from every dt in a list
+lColNames = lapply(lData, names)
+
+lColNames
+```
+
+Seems like `dtFGF` contains additional two columns. Let's select column names that are common in all 3 data tables. We will use a function `intersect` that looks for common elements of two vectors. Since we need to find common elements in all 3 vectors with column names, we will use `Reduce` function that applies `intersect` to consecutive pairs from the `lColNames` list, i.e. 1-2, (the result of 1-2)-3, etc.
+
+```{r}
+vsCommonColNames = Reduce(intersect, lColNames)
+vsCommonColNames
+```
+
+Let's try row-bidning again but with an option `fill=TRUE` which fills NAs in columns that are not present. Then we will choose only common columns from each `dt`:
+
+```{r}
+# row-bind
+dtAll = rbindlist(lData, fill = T, idcol = "Stim_Treat")
+
+# choose only relevant columns
+dtAll = dtAll[, ..vsCommonColNames]
+
+# remove unnecessary objects
+rm(lData, lColNames, vsCommonColNames)
+
+head(dtAll)
+```
+
+## Read files in a loop (advanced)
+
+This is a much more convenient way to batch read a large number of files. 
+
+```{r}
+# create a list of files to read by searching a folder for files according to a pattern
+vsInputFiles = list.files(path = file.path(lPar$dirRoot, lPar$dirData, "original"), 
+                          pattern = "*.csv", 
+                          full.names = T)
+
+# apply a file-reading function to the list of file names
+lData = lapply(vsInputFiles, fread)
+
+```
+
+Each element of the list `lData` contain a `data.table`. There are 3 elements that correspond to the 3 files. It is handy to add an information which file the data came from. It will be useful later on to differentiate data between conditions. One way to achieve that is to give list elements a name. The name will be the growth factor name extracted from the file name using a `gsub` function and [regular expressions](https://www.cheatography.com/davechild/cheat-sheets/regular-expressions/).
+
+```{r}
+# assign names to list elements; extract growth factor name from the file path
+names(lData) = gsub(".*_(.*)sust_.*", "\\1", vsInputFiles)
+
+names(lData)
+```
+
+Now, we are in a position to bind all list elements into a single `data.table`:
+
+```{r error=TRUE}
+# combine data into a single object; the option idcol adds a column that corresponds to the name of the element list
+dtAll = rbindlist(lData, use.names = T, idcol = "Stim_Treat")
+
+```
+
+We have a problem because data tables do not have the same number of columns:
+
+```{r}
+lapply(lData, names)
+```
+
+FGF data has additional 2 columns. We can use `fill = T` option to `rbindlist` which will fill columns that do no exist with NA's. The we will choose only those columns that existed in all list elements.
+
+```{r}
+# create a vector with common column names that exist in all list elements
+vsCommonColNames = Reduce(intersect, lapply(lData, names))
+
+# combine data into a single object; the option idcol adds a column that corresponds to the name of the element list
+dtAll = rbindlist(lData, use.names = T, fill = T, idcol = "Stim_Treat")
+
+# add the new column name Stim_Treat
+vsCommonColNames = c(vsCommonColNames, "Stim_Treat")
+
+# retain anly some column names
+dtAll = dtAll[, ..vsCommonColNames, with = F]
+
+head(dtAll)
+```
+
+Finally, we need to add experimental data:
+
+```{r}
+# create a list of files to read by searching a folder for files according to a pattern
+vsExpFiles = list.files(path = file.path(lPar$dirRoot, lPar$dirData, "original"), 
+                          pattern = "*.xlsx", 
+                          full.names = T)
+
+# apply a file-reading function to the list of file names
+lExp = lapply(vsExpFiles, read_xlsx)
+
+# bind list elements into a single `data.table` object
+dtExp = as.data.table(rbindlist(lExp))
+```
+
+The merge of single-cell data with experimental description is done by treatment (`Stim_Treat`) and field of view (`Position` / `Metadata_Series` columns). We will use only some cilumns from `dtExp`.
+
+```{r}
+vsExpDescrCols = c("Position", "Channel", "Stim_Conc", "Stim_Treat")
+
+dtAll = merge(dtAll, dtExp[, ..vsExpDescrCols], by.x = c("Stim_Treat", "Metadata_Series"), by.y = c("Stim_Treat", "Position"))
+
+# remove unnecessary objects
+rm(lData, lExp, dtExp, vsExpDescrCols, vsInputFiles, vsExpFiles, vsCommonColNames)
+
+dtAll
+```
+
+# Milestone 1
+
+Let's save the resulting data as a milestone for future reference:
+
+```{r eval = F}
+sFilePathTmp = file.path(lPar$dirRoot, lPar$dirData, "m1_allGF_wExpDescr.csv")
+
+fwrite(x = dtAll, file = sFilePathTmp, row.names = F)
+
+# Compress the file to save space
+gzip(sFilePathTmp, overwrite = T)
+
+rm(sFilePathTmp)
+```
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r eval = F}
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m1_allGF_wExpDescr.csv.gz"))
+```
+
+
+# Column names
+
+So far, we have hard-coded column names in multiple points throughout the script, which is a **very bad practice**! Column names can change, which would then require multiple changes in the code. Let's at least store the names of all columns in one place and make the code more robust. 
+
+```{r}
+# create a list with strings for column names
+
+lCol = list(
+  fov = "Metadata_Series",
+  frame = "Metadata_T",
+  trackid = "TrackObjects_Label",
+  meas = "Intensity_MeanIntensity_Ratio",
+  ch = "Channel",
+  treatGF = "Stim_Treat",
+  treatConc = "Stim_Conc",
+  trackiduni = "TrackObjects_Label_Uni" # we will add this column later to our data
+)
+```
+
+If required, column names can be changed only here and the remianing code can be left intact. Alternatively, column name definitions can be isolated to command line parameters or an external file that is read during script's execution.
+
+# Some maintanance
+
+Before we proceed, let's **make our lives easier** and add a column with a unique track identifier. The current `TrackObjects_Label` column contains track id's that are unique only within a single field of view. To make them unique, we shall combine the `Stim_Treat`, `Metadata_Series`, and `TrackObjects_Label` columns into a string using the good old `sprintf` function.
+
+```{r}
+dtAll[, (lCol$trackiduni) := sprintf("%s_%02d_%04d", get(lCol$treatGF), get(lCol$fov), get(lCol$trackid))]
+head(dtAll)
+```
+
+A unique track id will allow us to easily pick individual time series, plot them, etc.
+
+Another step to make our lives easier is to [key the data table](https://stackoverflow.com/questions/20039335/what-is-the-purpose-of-setting-a-key-in-data-table). By setting a key to the unique track id, we will be able to easily subset our data as we shall see in a moment.
+
+```{r}
+setkeyv(dtAll, lCol$trackiduni)
+```
+
+Finally we will remove columns that we don't need anymore:
+
+```{r}
+dtAll[, c(lCol$fov, lCol$trackid, lCol$ch) := NULL]
+```
+
+
+# Data exploration
+
+From now we will access column names of `dtAll` using variables defined above instead of typing the column name explicitly. 
+
+For example to calculate a 5-point summary of the measurement column, we write the following:
+
+```{r}
+summary(dtAll[[lCol$meas]])
+```
+
+...and we have some missing data. Let's inspect the rows with NA's.
+
+## Missing data
+
+## NA's
+
+```{r}
+head(dtAll[is.na(get(lCol$meas))])
+```
+
+All NA's come from a single time point in the same FOV. Different tracks are affected. One way to deal with NA's is to impute them with interpolated values. A package `imputeTS` has a handy function `na_interpolation`. But do we have enough data around NA's to interpolate? How long are time series with NA's?
+
+Let's print one such time series:
+
+```{r}
+dtAll[get(lCol$trackiduni) == "FGF_08_0001"][[lCol$meas]]
+```
+
+Let's also check the length of all other time series with NA's. 
+
+```{r}
+# make a vector with strings of unique track ids of time series that contain NA's
+vsTracksWithNAs = dtAll[is.na(get(lCol$meas))][[lCol$trackiduni]]
+vsTracksWithNAs
+```
+
+
+```{r}
+# calculate the number of time points of tracks with NA's
+dtAll[vsTracksWithNAs, .N, by = c(lCol$trackiduni)]
+```
+
+**Notice** that we have subset the table using a vector of unique track id's `vsTracksWithNAs` by using `dtAll[vsTracksWithNAs, ...]` syntax. This is possible because we have keyed the table by the `TrackObjects_Label_Uni` column. Whatever is provided to the `i` argument of the data table is therefore automatically assumed to be the key.
+
+**Notice 2** looks like we have another problem... The track `FGF_08_0011` has one time point less than others. What's going on? Is it a more common problem?
+
+### Missing time points
+
+Let's have a look at the min and max of the number of time points per time series. The `.N` calculates the number of rows, and this stat is calculate per unique time series id.
+
+```{r}
+summary(dtAll[, .N, by = c(lCol$trackiduni)][["N"]])
+```
+
+Some rows with time points are completely missing; there's not even NA in the measurement column. We will add these rows and set NA's to the measurement. Then we will interopolate.
+
+To *stretch* the data we will use a neat solution based on [this](https://stackoverflow.com/a/44686705/1898713). Just accept that it works...
+
+```{r}
+# key the table with all non-measurement columns
+vsGroupingCols = c(lCol$treatGF, lCol$treatConc, lCol$trackiduni)
+
+setkeyv(dtAll, c(vsGroupingCols, lCol$frame))
+
+# make a temporary table with a full sequence of time points for every grouping present
+# equivalently, you could use data.table::CJ or base::grid.expand
+dtTmp = dtAll[,
+              .(min(get(lCol$frame), na.rm = T):max(get(lCol$frame), na.rm = T)),
+              by = vsGroupingCols]
+
+# key by grouping columns
+setkeyv(dtTmp, c(vsGroupingCols, "V1"))
+
+# subset original dt with the temporary dt; it's equivalent to left-join
+dtAll = dtAll[dtTmp]
+
+# clean
+rm(dtTmp)
+```
+
+
+### Data imputation
+
+We have many more rows with measurments set to NA:
+
+```{r}
+head(dtAll[is.na(get(lCol$meas))], 10)
+```
+
+We will use `na_interpolation` function from `imputeTS` package:
+
+```{r}
+dtAll[, (lCol$meas) := na_interpolation(get(lCol$meas)), by = c(lCol$trackiduni)]
+
+dtAll[is.na(get(lCol$meas))]
+```
+
+No more NA's...
+
+
+
+# Milestone 2
+
+Let's save the resulting data as a milestone for future reference:
+
+```{r eval = F}
+sFilePathTmp = file.path(lPar$dirRoot, lPar$dirData, "m2_allGF_wExpDescr_noNAs.csv")
+
+fwrite(x = dtAll, file = sFilePathTmp, row.names = F)
+
+# Compress the file to save space
+gzip(sFilePathTmp, overwrite = T)
+
+rm(sFilePathTmp, dtTmp, vsGroupingCols, vsTracksWithNAs)
+```
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r eval = F}
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m2_allGF_wExpDescr_noNAs.csv"))
+```
+
+
+
+# Plotting
+
+Finally, we can plot some data!
+
+## Single-cell data
+
+```{r}
+
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, y = lCol$meas, group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) # parameter alpha adds transparency
+
+p0
+```
+
+...and we have outliers. Actually, two kinds of outliers. Some time series have single time points that are way above the average. There are also several time series that are behaving entirely differently to the rest, so called *dynamic outliers*.
+
+## Point outliers
+
+Let's remove single time points above the threshold **2000**, and impute them with interpolated data.
+
+```{r}
+dtAll[get(lCol$meas) > 2000]
+```
+
+```{r}
+# replace time points with measurements above the threshold with NA's
+dtAll[get(lCol$meas) > 2000, (lCol$meas) := NA]
+
+# interpolate NA's (again)
+dtAll[, (lCol$meas) := na_interpolation(get(lCol$meas)), by = c(lCol$trackiduni)]
+```
+
+
+## Dynamic outliers
+
+Let's remove entire trajectories if the measurment is below **1000**:
+
+```{r}
+# vector with unique track id's of dynamic outliers
+vsTrackOut = unique(dtAll[get(lCol$meas) < 1000][[lCol$trackiduni]])
+
+# leave only tracks that are not in th eoutlier vector
+dtAll = dtAll[!(get(lCol$trackiduni) %in% vsTrackOut)]
+
+# clean
+rm(vsTrackOut)
+```
+
+
+
+
+# Milestone 3
+
+Let's save the resulting data as a milestone for future reference:
+
+```{r eval = F}
+sFilePathTmp = file.path(lPar$dirRoot, lPar$dirData, "m3_allGF_wExpDescr_noNAs_noOut.csv")
+
+fwrite(x = dtAll, file = sFilePathTmp, row.names = F)
+
+# Compress the file to save space
+gzip(sFilePathTmp, overwrite = T)
+
+rm(sFilePathTmp)
+```
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r eval = F}
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m3_allGF_wExpDescr_noNAs_noOut.csv"))
+```
+
+# Plotting (coninued)
+
+## Plot per condition
+
+```{r}
+p1 = p0 +
+  facet_grid(Stim_Treat ~ Stim_Conc)
+
+# The facet_grid accepts a formula with column names; the equivalent to use vasriables with column names is:
+# facet_grid(as.formula(paste0(lCol$treatGF, "~", lCol$treatConc)))
+
+p1
+```
+
+## Adding stats
+
+### The mean
+
+```{r}
+p2 = p1 +
+  stat_summary(
+      aes_string(y = lCol$meas, group = 1),
+      fun.y = mean,
+      colour = 'red',
+      linetype = 'solid',
+      size = 1,
+      geom = "line",
+      group = 1
+    )
+
+p2
+```
+
+
+### Confidence intervals
+
+```{r}
+p3 = p2 +
+    stat_summary(
+      aes_string(y = lCol$meas, group = 1),
+      fun.data = mean_cl_normal,
+      colour = 'red',
+      alpha = 0.25,
+      geom = "ribbon",
+      group = 1, 
+      linetype = "dashed"
+    )
+p3
+```
+
+## Interactive plots
+
+For the sake of clarity, we choose only one condition for plotting:
+
+```{r}
+pInt = ggplot(dtAll[get(lCol$treatGF) == "NGF" & get(lCol$treatConc) == "0.25 ng/ml"], 
+              aes_string(x = lCol$frame, 
+                         y = lCol$meas, 
+                         group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) +
+  facet_grid(Stim_Treat ~ Stim_Conc)
+
+ggplotly(pInt)
+```
+
+
+## Beautifying ggplots
+
+Add themes, e.g. `+ theme_bw()`, or themes available in packages such as `ggthemes`. 
+
+Use `+ labels() to add the title, subtitle, the caption.
+
+Use `+ xlab()` or `+ ylab()` to control labels of x and y axes.
+
+```{r}
+p3 +
+  theme_minimal() +
+  labs(title = "ERK activity in response to sustained GF treatments",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("Time (min)") +
+  ylab("ERK activity")
+```
+
+
+# Clustering
+
+## Hierarchical clustering
+
+We will use a standard R function `hclust` to perform hierarchical clustering. The first and only required argument of that function is a matrix with all pairwise distances between the time series. We obtain such a matrix with a `dist` function, which requires the data in a wide format. To convert from long to wide format we use `dcast` function.
+
+### Convert from long to wide format
+
+```{r}
+# long to wide format
+# every row corresponds to a single time series; column are time points
+dtAllWide = dcast(dtAll, TrackObjects_Label_Uni ~ Metadata_T, value.var = "Intensity_MeanIntensity_Ratio")
+
+# obtain row names for later
+vsRowNames = dtAllWide[[lCol$trackiduni]]
+
+# make a matrix
+mAllWide = as.matrix(dtAllWide[, -1])
+
+# assign row names to the matrix (useful for later plotting heatmaps from clustering)
+rownames(mAllWide) = vsRowNames
+```
+
+### Distance matrix
+
+```{r}
+mDist = dist(mAllWide, method = "euclidean")
+```
+
+
+### hclust
+
+```{r}
+clRes = hclust(mDist, method = "complete")
+str(clRes)
+```
+
+### Plot
+
+```{r}
+heatmap.2(mAllWide)
+```
+
+Remove unnecessary stuff: the dendrogram for columns
+
+```{r, fig.width= 8, fig.height=10}
+heatmap.2(mAllWide, 
+          trace = "none",
+          Colv = "Null", 
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)))
+```
+
+
+## Interactive heatmaps
+
+## K-means
+
+## Measures of clustering quality
+
+# Advanced topics
+
+## Command-line parameters
+
+
+
+
