@@ -19,7 +19,7 @@ From experimental data to plots
 author: Maciej Dobrzynski
 date: September 15, 2019
 width: 1600
-height: 700
+height: 900
 
 Some context about data from our lab
 ====================================
@@ -166,12 +166,10 @@ In the above example, column names are given explicitly. Hardcoding them this wa
 It cleaner to store the column names somewhere at the beginning of the script, where it's easy to change them, and then use variables with those names in the code. 
 
 ```{r}
-lCol = list()
-lCol$meas = 'weight'
-lCol$time = 'year'
-lCol$group = c('name', 'gender')
-lCol$timeLast = 'year2015'
-
+lCol = list(meas = 'weight',
+            time = 'year',
+            group = c('name', 'gender'),
+            timeLast = 'year2015')
 lCol
 ```
 
@@ -197,7 +195,9 @@ data.table - aggregation (2)
 The same summary but with column names stored as strings in elements of the list `lCol`. The `j` part of the `data.table` requires us to use a function `get` to interpret the string as the column name.
 
 ```{r}
-dtBabies[, .(meanWeight = mean(get(lCol$timeLast))), by = c(lCol$group[2])]
+dtBabies[, 
+         .(meanWeight = mean(get(lCol$timeLast))), 
+         by = c(lCol$group[2])]
 
 ```
 
@@ -206,9 +206,9 @@ Wide to long format
 
 Our data table is in the wide format. To convert it to long format, use the function `melt`. 
 
-Provide the names of **identification** (parameter `id.vars`) and *measure* variables (parameter `measure.vars`). If none are provided, `melt` tries guessing them automatically, which sometimes may result in a wrong conversion. Both variables can be provided as explicit strings with column names, or as column numbers.
+Provide the names of **identification** (parameter `id.vars`) and *measure* variables (parameter `measure.vars`). If none are provided, `melt` guesses them automatically, which may result in a wrong conversion. Both variables can be given as strings with column names, or as column numbers.
 
-The original data frame contained missing values. The function `melt` has an option `na.rm=T` to omit them in the long-format table.
+The original data frame contained missing values. The option `na.rm=T` omits them in the long-format table.
 
 ```{r}
 
@@ -218,7 +218,6 @@ dtBabiesLong = data.table::melt(dtBabies,
                                 variable.name = 'year',
                                 value.name = 'weight',
                                 na.rm = T)
-
 dtBabiesLong
 ```
 
@@ -415,7 +414,7 @@ dtAll = rbindlist(lData, use.names = T, idcol = "Stim_Treat")
 Complete data (continued)
 ========================
 
-We can fetch the data for all growth factors and experiment description from a **Milestone 1** file:
+Fetch the data for all growth factors and experiment description from a **Milestone 1** file:
 
 ```{r}
 dtAll = fread("./data/m1_allGF_wExpDescr.csv.gz")
@@ -504,9 +503,9 @@ head(dtAll[is.na(get(lCol$meas))])
 Missing data (continued)
 ============
 
-All NA's come from a single time point in the same FOV. Different tracks are affected. One way to deal with NA's is to impute them with interpolated values. A package `imputeTS` has a handy function `na_interpolation`. But do we have enough data around NA's to interpolate? How long are time series with NA's?
+All NA's come from a single time point in the same FOV. Different tracks are affected. One way to deal with NA's is to impute them with interpolated values. A package `imputeTS` has a handy function `na_interpolation`. But 
 
-Let's print one such time series:
+Do we have enough data around NA's to interpolate? Let's print one such time series:
 
 ```{r}
 dtAll[get(lCol$trackiduni) == "FGF_08_0001"][[lCol$meas]]
@@ -566,7 +565,7 @@ In our case:
 - We will *stretch* the data to introduce `NA's` for time points that miss data entirely. A neat solution is based on [this](https://stackoverflow.com/a/44686705/1898713).
 - Interpolate `NA's` using `na_interpolation` function from `imputeTS` package.
 
-The dataset with interpolated `NA's` can fetched from **Milestone 2**:
+Fetch the dataset with interpolated `NA's` from **Milestone 2**:
 
 ```{r}
 dtAll = fread("./data/m2_allGF_wExpDescr_noNAs.csv.gz")
@@ -579,11 +578,9 @@ Plot single-cell data
 ```{r, fig.align='center', fig.width= 15, fig.height=8}
 require(ggplot2)
 p0 = ggplot(dtAll, 
-            aes_string(x = lCol$frame, 
-                       y = lCol$meas, 
+            aes_string(x = lCol$frame, y = lCol$meas, 
                        group = lCol$trackiduni)) +
   geom_path(alpha = 0.1) # parameter alpha adds transparency
-
 p0
 ```
 
@@ -647,7 +644,7 @@ A handy interactive tool written by Mauro Gwerder (our Bachelor student) can hel
 Handling outliers (continued)
 =================
 
-The dataset without outliers can be fetched from **Milestone 3**:
+Fetch the dataset without outliers from **Milestone 3**:
 
 ```{r}
 dtAll = fread("./data/m3_allGF_wExpDescr_noNAs_noOut.csv.gz")
@@ -680,7 +677,7 @@ The baseline level before stimulation is very heterogeneous (due to biological a
 dt[, newCol := mean(.SD[1:20, meas]), by = uniqueID]
 ```
 
-The mnemoninc `.SD` corresponds to a subset of data as defined by `by` section.
+`.SD` corresponds to a subset of data as defined by `by` section. It's a temporary data table and can be used as such.
 
 Exercise 5: normalisation - solution
 =========================
@@ -699,7 +696,7 @@ dtAll[,
 dtAll[, baseline := NULL]
 ```
 
-The dataset with normalised column can be fetched from **Milestone 4**:
+Fetch the dataset with normalised measurement column from **Milestone 4**:
 
 ```{r}
 dtAll = fread("./data/m4_allGF_wExpDescr_noNAs_noOut_norm0-20.csv.gz")
@@ -712,10 +709,11 @@ Plot per condition using normalized data
 
 ```{r, fig.align='center', fig.width= 12, fig.height=6}
 # same as above; repeated for convenience
-p0 = ggplot(dtAll, aes_string(x = lCol$frame, y = lCol$measNorm, group = lCol$trackiduni)) +
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, 
+                              y = lCol$measNorm, 
+                              group = lCol$trackiduni)) +
   geom_path(alpha = 0.1) + # parameter alpha adds transparency
   facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
-
 p0
 ```
 
@@ -769,11 +767,12 @@ ggplotly(p1)
 
 ```{r, results='hide', echo=FALSE}
 require(plotly)
-p1int = ggplotly(p1)
-htmlwidgets::saveWidget(as.widget(p1int), file = "demo.html")
+require(htmlwidgets)
+p1int = plotly::ggplotly(p1)
+htmlwidgets::saveWidget(as.widget(p1int), file = "plotly-widget.html", libdir = "widgets")
 ```
 
-<iframe src="demo.html" style="position:absolute;height:100%;width:100%"></iframe>
+<iframe src="plotly-widget.html" style="position:absolute;height:100%;width:100%"></iframe>
 
 
 Exercise 6: long to wide format
@@ -800,7 +799,7 @@ dtAllWide = dcast(dtAll,
 # obtain row names for later
 vsRowNames = dtAllWide[[lCol$trackiduni]]
 
-# make a matrix
+# convert to a matrix; omit the first column
 mAllWide = as.matrix(dtAllWide[, -1])
 
 # assign row names to the matrix (useful for later plotting heatmaps from clustering)
@@ -873,34 +872,46 @@ Heatmap with coloured dendrogram
 ```{r, fig.align='center', fig.width= 8, fig.height=8}
 
 heatmap.2(mAllWide, 
-          dendrogram = "row",
+          dendrogram = "row", Colv = F,
           Rowv = myRowDend, # use our coloured dendrogram to order rows
-          Colv = F,
-          trace = "none",
-          density.info = "density",
+          trace = "none", density.info = "density",
           col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
-          xlab = "Time (min)",
-          ylab = "Cells", 
-          key.xlab = "ERK activity")
+          xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
 ```
 
 Interactive heatmap
 ==================
 
-```{r, fig.width= 8, fig.height=10, eval = F}
+```{r, eval = F}
 require(d3heatmap)
 d3heatmap(mAllWide,
-          dendrogram = "row",
+          dendrogram = "row", Colv = F,
           Rowv = myRowDend,
-          Colv = F,
-          trace = "none",
+          trace = "none", density.info = "density", 
           show_grid = F,
-          density.info = "density",
           col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
-          xlab = "Time (min)",
-          ylab = "Cells", 
-          key.xlab = "ERK activity")
+          xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
 ```
+
+
+```{r, results='hide', echo=FALSE}
+require(d3heatmap)
+require(htmlwidgets)
+
+p2int = d3heatmap(mAllWide,
+          dendrogram = "row", Colv = F,
+          Rowv = myRowDend,
+          trace = "none", density.info = "density", 
+          show_grid = F,
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
+
+htmlwidgets::saveWidget(as.widget(p2int), file = "d3heatmap-widget.html", libdir = "widgets")
+```
+
+<iframe src="d3heatmap-widget.html" style="position:absolute;height:60%;width:70%"></iframe>
+
+
 
 Shape clustering
 ================
@@ -920,7 +931,7 @@ Shape clustering (continued)
 
 We will use `dtwclust` and `proxy` packages to calculate the distance matrix
 
-```{r, eval = F}
+```{r}
 # From: https://stackoverflow.com/a/50776685/1898713
 require(dtwclust)
 
@@ -942,15 +953,11 @@ Shape clustering (continued 2)
 ```{r, fig.align='center', fig.width= 8, fig.height=8}
 
 heatmap.2(mAllWide, 
-          dendrogram = "row",
+          dendrogram = "row", Colv = F,
           Rowv = myRowDend, # use our coloured dendrogram to order rows
-          Colv = F,
-          trace = "none",
-          density.info = "density",
+          trace = "none", density.info = "density",
           col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
-          xlab = "Time (min)",
-          ylab = "Cells", 
-          key.xlab = "ERK activity")
+          xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
 ```
 
 
@@ -964,7 +971,6 @@ Step 1: hierarchical clustering
 ```{r}
 clTree  <- mAllWide %>% 
   stats::dist(., method = "euclidean") %>% 
-  stats::as.dist(.) %>% # conversion required because dtw_basic returns a cross-distance matrix; it is symmetric, thus we take the lower triangle
   stats::hclust(., "complete") 
 
 str(clTree)
@@ -1026,9 +1032,8 @@ Exercise 7: plot time series per cluster - solution
 =============
 
 ```{r, fig.align='center', fig.width= 10, fig.height=5}
-ggplot(dtAllCl, aes_string(x = lCol$frame, 
-                                y = lCol$measNorm, 
-                                group = lCol$trackiduni)) +
+ggplot(dtAllCl, aes_string(x = lCol$frame, y = lCol$measNorm, 
+                           group = lCol$trackiduni)) +
   geom_path(alpha = 0.1) +
   stat_summary(
       aes_string(y = lCol$measNorm, group = 1),
@@ -1226,4 +1231,4 @@ Interactive clustering
 
 A free R/Shiny app available [here](https://github.com/dmattek/shiny-timecourse-inspector).
 
-![TCI](./presentation-images/tci-gui.png)
+<img src="./presentation-images/tci-gui.png"; style="max-width:800px;float:center;">
