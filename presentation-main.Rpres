@@ -17,8 +17,21 @@
 From experimental data to plots
 ========================================================
 author: Maciej Dobrzynski
-date: August 21, 2019
-autosize: true
+date: September 15, 2019
+width: 1600
+height: 700
+
+Some context about data from our lab
+====================================
+
+- Lot's of time-lapse microscopy experiments: taking movies of many cells
+- Cells have fluorescent biosensors that measure activities of proteins
+- We look at the dynamics of protein activity
+- Movies are processed to identify cells, measure the fluorescent signal, track cells over time
+- The reulting data: thousands of time series
+- Batch image analysis on a computing cluster generates lot's of CSV files
+- Postprocessing: merging files from different experimental conditions, cleaning data from outliers, pulling experimental description from other files
+
 
 RStudio Projects
 ========================================================
@@ -37,11 +50,13 @@ File > New Project... to create a new R project
 
 Code formatting
 ===============
-When working in RStudio with regular R scripts, use # to add comments to your code. Additionally, any comment line which includes at least four trailing dashes (-), equal signs (=), or pound signs (#) automatically creates a code section. For example, all of the following lines create code sections.
+Use # to add comments to your code. 
 
-Note that the line can start with any number of pound signs (#) so long as it ends with four or more -, =, or # characters.
+Any comment line with at least four trailing dashes (`-`), equal signs (`=`), or pound signs (`#`) automatically creates a code section. 
 
-To navigate between code sections you can use the Jump To menu available at the bottom of the editor. You can expand the folded region by either clicking on the arrow in the gutter or on the icon that overlays the folded code.
+To navigate between code sections, use the *Jump To* menu available at the bottom of the editor. 
+
+The outline of your code sections is available in the upper right corner of the editor window.
 
 RStudio supports both automatic and user-defined **folding** for regions of code. Code folding allows you to easily show and hide blocks of code to make it easier to navigate your source file and focus on the coding task at hand.
 
@@ -52,7 +67,7 @@ To indent or reformat the code use:
 
 Syntax convention
 =================
-It is a good practice to stick to a single naming convention throughout the code. A convenient convention is a so-called [camel notation](https://en.wikipedia.org/wiki/Camel_case#Programming_and_coding), where names of variables, constants, functions are constructed by capitalizing each comound of the name, e.g.:
+Stick to a single naming convention throughout the code. A convenient convention is a so-called [camel notation](https://en.wikipedia.org/wiki/Camel_case#Programming_and_coding), where names of variables, constants, functions are constructed by capitalizing each comound of the name, e.g.:
 
    - `calcStatsOfDF` - function to calculate stats
    - `nIteration` - prefix `n` to indicate an integer variable
@@ -61,45 +76,1154 @@ It is a good practice to stick to a single naming convention throughout the code
    - `vFileNames` - `v` for vector
    - `lColumnNames` - `l` for a list
 
-
-R notebooks
-===========
-[R Notebooks](https://bookdown.org/yihui/rmarkdown/notebook.html) allows to create publish-ready documents with text, graphics, and interactive plots. Can be saved as an html, pdf, or a Word document. 
-
-An R Notebook is a document with chunks that can be executed independently and interactively, with output visible immediately beneath the input. The text is formatted using [R Markdown](https://rmarkdown.rstudio.com/authoring_basics.html).
-
-
-Important concept 1: data.table
-========================================================
-
-`Data.table` package is a faster, more efficient [framework](https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html) for data manipulation compared to R's default `data.frame`. It provides a consistent syntax for subsetting, grouping, updating, merging, etc. 
-
-
-Important concept 2: writing robust code
-========================================
-
-Access columns by reference, never by numbers! Avoid hard-coding column names in your code. Column order may change, column names may change.
-
-
-Importnat concept 3: avoid for loops
-====================================
+Avoid for loops
+=================
 
 From [R-bloggers](https://www.r-bloggers.com/how-to-avoid-for-loop-in-r/):
 
 > A FOR loop is the most intuitive way to apply an operation to a series by looping through each item one by one, which makes perfect sense logically but should be avoided by useRs given the low efficiency.
 
-Some context about data from our lab
-====================================
 
-- Lot's of time-lapse microscopy experiments: taking movies of many cells
-- Cells have fluorescent biosensors that measure activities of proteins
-- We look at the dynamics of protein activity
-- Movies are processed to identify cells, measure the fluorescent signal, track cells over time
-- The reulting data: thousands of time series
-- Batch image analysis on a computing cluster generates lot's of CSV files
-- Postprocessing: merging files from different experimental conditions, cleaning data from outliers, pulling experimental description from other files
+As an aletrnative, use `apply` function family, e.g. `lapply`.
 
-Let's go for a **R**ide
+R notebooks
+===========
+Use [R Notebooks](https://bookdown.org/yihui/rmarkdown/notebook.html) to create publish-ready documents with text, graphics, and interactive plots. Can be saved as an html, pdf, or a Word document. 
+
+An R Notebook is a document with chunks that can be executed independently and interactively, with output visible immediately beneath the input. The text is formatted using [R Markdown](https://rmarkdown.rstudio.com/authoring_basics.html).
+
+
+data.table
+========================================================
+
+`Data.table` package is a faster, more efficient [framework](https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html) for data manipulation compared to R's default `data.frame`. It provides a consistent syntax for subsetting, grouping, updating, merging, etc. 
+
+Let's define a data table:
+
+```{r}
+require(data.table)
+dtBabies = data.table(name= c("Jackson", "Emma", "Liam", "Ava"), 
+                    gender = c("M", "F", "M", "F"), 
+                    year2011= c(74.69, NA, 88.24, 81.77), 
+                    year2012=c(84.99, NA, NA, 96.45), 
+                    year2013=c(91.73, 75.74, 101.83, NA),
+                    year2014=c(95.32, 82.49, 108.23, NA),
+                    year2015=c(107.12, 93.73, 119.01, 105.65))
+dtBabies
+
+```
+
+data.table - general form
+========================================================
+
+The general form of data.table syntax is as follows:
+
+```
+DT[i, j, by]
+
+##   R:                 i                 j        by
+## SQL:  where | order by   select | update  group by
+```
+
+**The way to read it (out loud) is:** take DT, subset/reorder rows using i, then calculate j, grouped by by.
+
+data.table - selection
+========================================================
+
+Select specific records:
+
+```{r}
+dtBabies[gender == 'M']
+```
+
+Select specific columns:
+```{r}
+dtBabies[, .(name, gender, year2015)]
+```
+
+data.table - aggregation
+========================
+
+Calculate the mean of a column:
+
+```{r}
+dtBabies[, .(meanWeight = mean(year2015))]
+```
+
+Calculate the mean of a column by gender:
+
+```{r}
+dtBabies[, .(meanWeight = mean(year2015)), by = gender]
+
+```
+
+
+data.table - reference by name
+==============================
+
+In the above example, column names are given explicitly. Hardcoding them this way in the script is potentially **dangerous**, for example when for some reason column names change. 
+
+It cleaner to store the column names somewhere at the beginning of the script, where it's easy to change them, and then use variables with those names in the code. 
+
+```{r}
+lCol = list()
+lCol$meas = 'weight'
+lCol$time = 'year'
+lCol$group = c('name', 'gender')
+lCol$timeLast = 'year2015'
+
+lCol
+```
+
+data.table - selection
+======================
+
+Select specific records:
+
+```{r}
+dtBabies[get(lCol$group[[2]]) == 'M']
+```
+
+Select specific columns:
+```{r}
+myColumns = c(lCol$group[[1]], lCol$timeLast)
+dtBabies[, ..myColumns]
+```
+
+
+data.table - aggregation (2)
+============================
+
+The same summary but with column names stored as strings in elements of the list `lCol`. The `j` part of the `data.table` requires us to use a function `get` to interpret the string as the column name.
+
+```{r}
+dtBabies[, .(meanWeight = mean(get(lCol$timeLast))), by = c(lCol$group[2])]
+
+```
+
+Wide to long format
+===================
+
+Our data table is in the wide format. To convert it to long format, use the function `melt`. 
+
+Provide the names of **identification** (parameter `id.vars`) and *measure* variables (parameter `measure.vars`). If none are provided, `melt` tries guessing them automatically, which sometimes may result in a wrong conversion. Both variables can be provided as explicit strings with column names, or as column numbers.
+
+The original data frame contained missing values. The function `melt` has an option `na.rm=T` to omit them in the long-format table.
+
+```{r}
+
+dtBabiesLong = data.table::melt(dtBabies, 
+                                id.vars = c('name', 'gender'), 
+                                measure.vars = 3:7,
+                                variable.name = 'year',
+                                value.name = 'weight',
+                                na.rm = T)
+
+dtBabiesLong
+```
+
+Long to wide
+===============
+The function `dcast` converts from long to wide format. The function has a so called *formula interface* that specifies a combination of variables that uniquely identify a row.
+
+Note that because some combinations of `name + gender + year` do not exist, the `dcast` function will introduce `NAs`.
+
+```{r}
+dtBabiesWide = data.table::dcast(dtBabiesLong, 
+                                 name + gender ~ year, 
+                                 value.var = 'weight')
+
+dtBabiesWide
+
+```
+
+Note on formula interface
+=========================
+
+There are two ways to use the formula interface with string variables:
+
+Create formula string explicitly
+
+```{r}
+as.formula(
+   paste0(
+      lCol$group[[1]], "+", lCol$group[[2]], 
+      "~", lCol$time))
+```
+
+Use `reformulate` function. The limitation being a single response variable only!
+
+```{r}
+reformulate(response = c(lCol$group[[1]], lCol$group[[2]]),
+            termlabels = lCol$time)
+```
+
+
+data.table - IO
+===============
+
+`fread`
+
+Fast reading of the files; use `nThread` option to take advantage of multiple threads and read files even faster! 
+
+[Documentation](https://www.rdocumentation.org/packages/data.table/versions/1.12.2/topics/fread).
+
+***
+
+`fwrite` 
+
+for fast writing; also compressed files (gz and bz2). 
+
+[Documentation](https://www.rdocumentation.org/packages/data.table/versions/1.12.2/topics/fwrite).
+
+Our dataset
+===========
+
+Comes from our recent publication *Temporal perturbation of ERK dynamics reveals network architecture of FGF2-MAPK signaling* (2019) available [here](https://doi.org/10.1101/629287).
+
+PC-12 cells stimulated with 3 different growth factors (EGF, NGF, FGF2) at different concentrations.
+
+The PC-12 cells express a **FRET** biosensor to indicate activity of the **ERK** kinase, an end point of the **MAPK** signalling pathway. 
+
+![EKAR biosensor](presentation-images/pc12-biosensor.png)
+
+
+***
+
+![MAPK scheme](presentation-images/mapk-scheme.png)
+
+Our dataset (continued)
+===========
+
+Three different growth factors tested activate different parts of the MAPK network and result in different signalling dynamics, i.e. the behaviour of ERK activity over time. 
+
+Cells stimulated with growth factors were then imaged with a single-cell resolution over 3-4 hours at a 2-minute time resolution.
+
+A single experiment consists of a sustained stimulation with a single growth factor at 4 concentrations imaged at 4 fields of view. Thus, we have 16 fields of view per experiment.
+
+Data description
+================
+
+The folder `data` contains:
+
+- processed data at various milestones of our analysis, 
+- 3 sets of files that correspond to 3 growth factor treatments at 4 different concentrations. 
+
+![Data files](presentation-images/data-files.png)
+
+Data description (continued)
+================
+
+A single set from a single experiment includes:
+
+<span style="color:red">`tCoursesSelected_xGFsust_expXXXX.csv.gz`</span> a compressed file with single-cell data. Each row corresponds to the measurement of ERK activity in a single cell, at a single time point. Columns:
+
+- `Metadata_Series` an integer, 0-15, that corresponds to the field of view.
+- `Metadata_T` an integer, 0-100, corresponds to the time frame number in a movie from a single field of view.
+- `TrackObjects_Label` an integer that describes the track number from object tracking algorithm. The number is unique only within a single field of view.
+- `Intensity_MeanIntensity_Ratio` a float with the measurement of FRET ratio; this is our proxy of ERK activity.
+
+
+<span style="color:green">`experimentDescription_EGFsust.xlsx`</span> an Excel file with experiment description. Columns:
+
+- `Position` an integer, 0-15, with the number of the field of view.
+- `Channel` an integer, 1-4, with the number of the microfluidic channel.
+- `Stim_Conc` a string with an indication of the GF concentration.
+
+
+
+Exercise 1: read data
+=====================
+
+**Aim:**
+read data from a single experiment. Merge single-cell measurements of the EKAR biosensor fluorescence intensity with experimental description.
+
+**Hints:**
+Use following functions from `data.table` and `readxl` packages. 
+
+- `data.table::fread`
+- `readxl::read_xlsx`
+- `data.table::merge`
+
+Install packages with `install.packages("name_of_the_package")`.
+
+Exercise 1: read data - solution part 1
+=====================
+
+Read single-cell data:
+
+```{r}
+require(R.utils)
+require(data.table)
+dtEGF = fread("./data/original/tCoursesSelected_EGFsust_exp20170316.csv.gz")
+
+head(dtEGF)
+```
+
+Exercise 1: read data - solution part 2
+=====================
+
+Read experimental description:
+
+```{r}
+require(readxl)
+dtEGFexp = as.data.table(read_xlsx("./data/original/experimentDescription_EGFsust.xlsx"))
+
+head(dtEGFexp)
+```
+
+Exercise 1: read data - solution part 3
+=====================
+
+Merge single-cell data with experimental description. The common column is the ID of the field of view, which is named `Metadata_Series` in single-cell data and `Position` in experimental description.
+
+```{r}
+# columns to keep from experimental description
+vsExpDescrCols = c("Position", "Channel", "Stim_Conc", "Stim_Treat")
+
+# merge data
+dtEGF = merge(dtEGF, dtEGFexp[, ..vsExpDescrCols], 
+              by.x = c("Metadata_Series"), by.y = "Position")
+
+head(dtEGF)
+```
+
+Complete data
+=============
+
+Since we have 3 datasets that correspond to 3 experiments with different growth factors, we can repeat the process as above, and concatenate 3 data tables at the end.
+
+For large experiments with many output files, it is best to make a list/vector with all filenames to read using `list.files`. Then, loop `fread` over that list, e.g.:
+
+```{r, eval = F}
+# create a list of files to read by searching a folder
+vsInputFiles = list.files(path = "./data/original", 
+                          pattern = "*.csv.gz", 
+                          full.names = T)
+
+# apply a file-reading function to the list of file names
+lData = lapply(vsInputFiles, fread)
+
+# combine data into a single object
+# the option idcol adds a column with the name of the list element
+dtAll = rbindlist(lData, use.names = T, idcol = "Stim_Treat")
+
+```
+
+**Caveat**: not all files have the same columns!
+
+Complete data (continued)
+========================
+
+We can fetch the data for all growth factors and experiment description from a **Milestone 1** file:
+
+```{r}
+dtAll = fread("./data/m1_allGF_wExpDescr.csv.gz")
+
+head(dtAll)
+```
+
+
+Access column names by strings
+==============================
+
+To make our lives easier, we will define a list with variables that contain strings with column mames:
+
+```{r}
+# create a list with strings for column names
+
+lCol = list(
+  fov = "Metadata_Series",
+  frame = "Metadata_T",
+  trackid = "TrackObjects_Label",
+  meas = "Intensity_MeanIntensity_Ratio",
+  measNorm = "Intensity_MeanIntensity_Ratio_Norm",
+  ch = "Channel",
+  treatGF = "Stim_Treat",
+  treatConc = "Stim_Conc",
+  trackiduni = "TrackObjects_Label_Uni", # we will add this column later
+  clid = "Cluster_Label"                 # we will add this column later
+)
+```
+
+Access column names by strings (continued)
+==============================
+
+Now, we can select rows like this:
+
+```{r}
+dtAll[get(lCol$meas) > 2000]
+```
+
+These are measurements of EKAR fluorescence above a certain threshold. 
+
+In fact, these measurements are **outliers**.
+
+
+Exercise 2: unique time series ID's
 =======================
 
+Before we proceed, let's **make our lives easier** and add a column with a unique track identifier. The current `TrackObjects_Label` column contains track ID's that are unique only within a single field of view. To make them unique, we shall combine the `Stim_Treat`, `Metadata_Series`, and `TrackObjects_Label` columns into a single string.
 
+**Aim:** create a column with unique time series ID's. It will become quite handy later on...
+
+**Hint:** use `paste`, `paste0`, or `sprintf` functions to concatenate strings from different columns.
+
+A unique track ID will allow us to easily pick individual time series, plot them, etc.
+
+Exercise 2: unique time series ID's - solution
+=======================
+
+```{r}
+dtAll[, (lCol$trackiduni) := sprintf("%s_%02d_%04d", 
+                                     get(lCol$treatGF), 
+                                     get(lCol$fov), 
+                                     get(lCol$trackid))]
+head(dtAll)
+```
+
+
+Data exploration
+================
+
+```{r}
+summary(dtAll)
+```
+
+We have missing data! (`NA's` in the measurement column).
+
+We also may have point and dynamic outliers.
+
+Missing data
+============
+
+```{r}
+head(dtAll[is.na(get(lCol$meas))])
+```
+
+Missing data (continued)
+============
+
+All NA's come from a single time point in the same FOV. Different tracks are affected. One way to deal with NA's is to impute them with interpolated values. A package `imputeTS` has a handy function `na_interpolation`. But do we have enough data around NA's to interpolate? How long are time series with NA's?
+
+Let's print one such time series:
+
+```{r}
+dtAll[get(lCol$trackiduni) == "FGF_08_0001"][[lCol$meas]]
+```
+
+Missing data (continued 2)
+============
+
+Let's also check the length of all other time series with NA's. 
+
+```{r}
+# make a vector with strings of unique track ids of time series that contain NA's
+vsTracksWithNAs = dtAll[is.na(get(lCol$meas))][[lCol$trackiduni]]
+vsTracksWithNAs
+```
+
+Missing data (continued 3)
+============
+
+```{r}
+# Key the table according to a unique track ID
+setkeyv(dtAll, lCol$trackiduni)
+
+# calculate the number of time points of tracks with NA's
+dtAll[vsTracksWithNAs, .N, by = c(lCol$trackiduni)]
+```
+
+Exercise 3: identify missing data
+============
+
+Looks like we have another problem... The track `FGF_08_0011` has one time point less than others. The entire row with the measurement is missing!
+
+**Aim:** calculate the number of time points per time series. Check the min and max.
+
+**Hint:** The `.N` calculates the number of rows.
+
+
+Exercise 3: identify missing data - solution
+============
+
+```{r}
+summary(dtAll[, .N, by = c(lCol$trackiduni)][["N"]])
+```
+
+Handling missing data
+=====================
+
+This dataset has two types of missing data:
+
+- `NA's` in the measurement for some data points.
+- Missing rows.
+
+Depending on the analysis, missing data might or might not pose a problem.
+
+In our case:
+
+- We will *stretch* the data to introduce `NA's` for time points that miss data entirely. A neat solution is based on [this](https://stackoverflow.com/a/44686705/1898713).
+- Interpolate `NA's` using `na_interpolation` function from `imputeTS` package.
+
+The dataset with interpolated `NA's` can fetched from **Milestone 2**:
+
+```{r}
+dtAll = fread("./data/m2_allGF_wExpDescr_noNAs.csv.gz")
+```
+
+
+Plot single-cell data
+=====================
+
+```{r, fig.align='center', fig.width= 15, fig.height=8}
+require(ggplot2)
+p0 = ggplot(dtAll, 
+            aes_string(x = lCol$frame, 
+                       y = lCol$meas, 
+                       group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) # parameter alpha adds transparency
+
+p0
+```
+
+Exercise 4A: remove point outliers
+==================================
+
+We have outliers... Actually, two types of outliers. Some time series have single time points that are way above the average. There are also several time series that are behaving entirely differently to the rest, so called *dynamic outliers*.
+
+**Aim:** remove single time points above the threshold **2000**, and impute them with interpolated data.
+
+**Hint:** replace outlier measurements with `NA's` and interpolate them with `imputeTS::na_interpolation`.
+
+Exercise 4A: remove point outliers - solution
+==================================
+
+```{r}
+# replace time points with measurements above the threshold with NA's
+dtAll[get(lCol$meas) > 2000, 
+      (lCol$meas) := NA]
+
+# interpolate NA's
+require(imputeTS)
+dtAll[, 
+      (lCol$meas) := na_interpolation(get(lCol$meas)), 
+      by = c(lCol$trackiduni)]
+```
+
+
+Exercise 4B: remove dynamics outliers
+======================================
+
+**Aim:** remove entire trajectories if the measurement is below **1000**.
+
+**Hint:** create a vector with unique track ID's for time series that have measurements below the threshold. Subset `dtAll` using that vector.
+
+Exercise 4B: remove dynamics outliers - solution
+======================================
+
+```{r}
+# vector with unique track id's of dynamic outliers
+vsTrackOut = unique(dtAll[get(lCol$meas) < 1000][[lCol$trackiduni]])
+
+# leave only tracks that are not in the outlier vector
+dtAll = dtAll[!(get(lCol$trackiduni) %in% vsTrackOut)]
+
+# clean
+rm(vsTrackOut)
+```
+
+
+Handling outliers
+=================
+
+There's no single recipe for handling outliers; it all depends on the analysis.
+
+A handy interactive tool written by Mauro Gwerder (our Bachelor student) can help with that process. The R/Shiny app can be downloaded from [here](https://github.com/maurogwerder/Outlier_app) and executed from RStudio.
+
+![OutlierApp](presentation-images/outlierApp.png)
+
+
+Handling outliers (continued)
+=================
+
+The dataset without outliers can be fetched from **Milestone 3**:
+
+```{r}
+dtAll = fread("./data/m3_allGF_wExpDescr_noNAs_noOut.csv.gz")
+```
+
+Plot per condition
+=====================
+
+```{r, fig.align='center', fig.width= 12, fig.height=6}
+# same as above; repeated for convenience
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, 
+                              y = lCol$meas, 
+                              group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) + # parameter alpha adds transparency 
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
+
+p0
+```
+
+Exercise 5: normalisation
+=========================
+
+The baseline level before stimulation is very heterogeneous (due to biological and technical noise). At this stage, we do not care about that variability, we only want to cluster the responses. Thus, we might get better results by normalising every time series to its baseline (i.e. first 20 time points).
+
+**Aim:** add a column to `dtAll` with a normalised measurement where every time series is divided by the mean of its first 20 time points. Plot normalised data.
+
+**Hint:** a column with the mean of first 20 elements of a group can be added this way:
+
+```{r, eval = F}
+dt[, newCol := mean(.SD[1:20, meas]), by = uniqueID]
+```
+
+The mnemoninc `.SD` corresponds to a subset of data as defined by `by` section.
+
+Exercise 5: normalisation - solution
+=========================
+
+```{r}
+# add a column with the mean of the beasline for every time series
+dtAll[, 
+      baseline := mean(.SD[1:20, get(lCol$meas)]), # add a new column with the mean of first 20 rows of the group
+      by = c(lCol$trackiduni)] # group by unique trajectory
+
+# add a column with normalized measurement
+dtAll[,
+      (lCol$measNorm) := get(lCol$meas) / baseline]
+
+# remove baseline column
+dtAll[, baseline := NULL]
+```
+
+The dataset with normalised column can be fetched from **Milestone 4**:
+
+```{r}
+dtAll = fread("./data/m4_allGF_wExpDescr_noNAs_noOut_norm0-20.csv.gz")
+```
+
+Exercise 5: normalisation - solution (continued)
+====================================
+
+Plot per condition using normalized data
+
+```{r, fig.align='center', fig.width= 12, fig.height=6}
+# same as above; repeated for convenience
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, y = lCol$measNorm, group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) + # parameter alpha adds transparency
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
+
+p0
+```
+
+Adding the mean to the plot
+========================================
+
+```{r, fig.align='center', fig.width= 12, fig.height=6}
+p1 = p0 +
+  stat_summary(
+      aes_string(y = lCol$measNorm, group = 1),
+      fun.y = mean, geom = "line", group = 1,
+      colour = 'red', linetype = 'solid', size = 1)
+
+p1
+```
+
+
+Beautifying plots
+=================
+
+Add themes, e.g. `+ theme_bw()`, or themes available in packages such as `ggthemes`. 
+
+Use `+ labels()` to add the title, subtitle, the caption.
+
+Use `+ xlab()` or `+ ylab()` to control labels of x and y axes.
+
+```{r, fig.align='center', fig.width= 10, fig.height=5}
+require(ggthemes)
+p1 +
+  theme_minimal() +
+  labs(title = "ERK activity in response to sustained GF treatments",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("Time (min)") +
+  ylab("ERK activity")
+```
+
+Exercise 6: interactive plots
+=============================
+
+**Aim:** make an interactive plot
+
+**Hint:** use `plotly::ggplotly` function
+
+Exercise 6: interactive plots - solution
+=============================
+
+```{r eval = F}
+require(plotly)
+ggplotly(p1)
+```
+
+```{r, results='hide', echo=FALSE}
+require(plotly)
+p1int = ggplotly(p1)
+htmlwidgets::saveWidget(as.widget(p1int), file = "demo.html")
+```
+
+<iframe src="demo.html" style="position:absolute;height:100%;width:100%"></iframe>
+
+
+Exercise 6: long to wide format
+===============================
+
+In order to cluster data and to plot the results of clustering as a heatmap we will use a handy function `heatmap.2` from `gplots` package.
+
+To do so, we need to convert `dtAll` from long to a wide format as a matrix. Such a matrix contains individual time series as rows. Columns correspond to time points.
+
+**Aim:** convert `dtAll` to a matrix in a wide format
+
+**Hint:** use `dcast` function.
+
+Exercise 6: long to wide format - solution
+===============================
+
+```{r}
+# long to wide format
+# every row corresponds to a single time series; column are time points
+dtAllWide = dcast(dtAll, 
+                  TrackObjects_Label_Uni ~ Metadata_T, 
+                  value.var = lCol$measNorm)
+
+# obtain row names for later
+vsRowNames = dtAllWide[[lCol$trackiduni]]
+
+# make a matrix
+mAllWide = as.matrix(dtAllWide[, -1])
+
+# assign row names to the matrix (useful for later plotting heatmaps from clustering)
+rownames(mAllWide) = vsRowNames
+
+# clean
+rm(vsRowNames, dtAllWide)
+```
+
+
+Hierarchical clustering
+=============
+
+```{r,  fig.align='center'}
+require(gplots)
+heatmap.2(mAllWide)
+```
+
+
+
+Prettify the heatmap
+====================
+
+We only want to cluster according to rows only. Clustering according to columns doesn't make sense for us because these are time points whose order we need to maintain in the plot. 
+
+Tune: 
+
+- the dendrogram for columns can be removed with the option `dendrogram = "row"` and clustering according to columns is removed with `Colv = F`,
+- display density of measured values on the colour key with `density.info = "density"`,
+- apply a custom palette, `col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99))`.
+- add labels with `xlab`, `ylab`, and `key.lab`.
+
+
+Prettify the heatmap (continued)
+====================
+```{r,  fig.align='center', fig.width= 8, fig.height=8}
+require(RColorBrewer)
+
+heatmap.2(mAllWide, 
+          dendrogram = "row", Colv = F,
+          trace = "none", density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
+```
+
+
+Piping
+========
+Before we proceed, let's introduce a very handy concept in R called *piping*. Pipes are an operator, `%>%`, and allow to express a sequence of operations without creating intermediate variables. The pipe operator comes with the **magrittr** package, which is loaded automatically by **tidyverse** packages.
+
+Colour dendrogram branches:
+
+```{r}
+require(proxy)
+require(dendextend)
+
+# create a coloured dendrogram using a given distance and a linkage method
+myRowDend  <- mAllWide %>% 
+  proxy::dist(., "euclidean") %>% # calculate distance
+  stats::hclust(., "complete") %>% # create a dendrogram
+  stats::as.dendrogram(.) %>%
+  dendextend::set("branches_k_color", k = 4) %>% # color k main branches
+  dendextend::set("branches_lwd", 2) %>% # set line width of the dendrogram
+  dendextend::ladderize(.) # reorganize the dendrogram
+```
+
+Heatmap with coloured dendrogram
+=================
+
+```{r, fig.align='center', fig.width= 8, fig.height=8}
+
+heatmap.2(mAllWide, 
+          dendrogram = "row",
+          Rowv = myRowDend, # use our coloured dendrogram to order rows
+          Colv = F,
+          trace = "none",
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity")
+```
+
+Interactive heatmap
+==================
+
+```{r, fig.width= 8, fig.height=10, eval = F}
+require(d3heatmap)
+d3heatmap(mAllWide,
+          dendrogram = "row",
+          Rowv = myRowDend,
+          Colv = F,
+          trace = "none",
+          show_grid = F,
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity")
+```
+
+Shape clustering
+================
+
+Above approaches treat individual time points as independent measurements. Instead, shape clustering such as Dynamic Time Warping (DTW) is suited for calculating distances between time series.
+
+Some resources:
+
+- Time series clustering with Dynamic Time Warping ([link](https://damien-datasci-blog.netlify.com/post/time-series-clustering-with-dynamic-time-warp/)).
+- Comparing Time-Series Clustering Algorithms in R Using the dtwclust Package ([link](https://cran.r-project.org/web/packages/dtwclust/vignettes/dtwclust.pdf)).
+- Calculating a distance matrix by dtw ([link](https://stackoverflow.com/questions/49500668/calculating-a-distance-matrix-by-dtw/50776685#50776685)).
+
+
+
+Shape clustering (continued)
+================
+
+We will use `dtwclust` and `proxy` packages to calculate the distance matrix
+
+```{r, eval = F}
+# From: https://stackoverflow.com/a/50776685/1898713
+require(dtwclust)
+
+myRowDend  <- mAllWide %>% 
+  proxy::dist(., method = "dtw_basic", pattern = symmetric1, norm = "L1", window.size = 10L) %>% 
+  stats::as.dist(.) %>% # conversion required because dtw_basic returns a cross-distance matrix; it is symmetric, thus we take the lower triangle
+  stats::hclust(., "complete") %>% 
+  stats::as.dendrogram(.) %>%
+  dendextend::set("branches_k_color", k = 5) %>% 
+  dendextend::set("branches_lwd", 2) %>%
+  dendextend::ladderize(.)
+```
+
+
+
+Shape clustering (continued 2)
+================
+
+```{r, fig.align='center', fig.width= 8, fig.height=8}
+
+heatmap.2(mAllWide, 
+          dendrogram = "row",
+          Rowv = myRowDend, # use our coloured dendrogram to order rows
+          Colv = F,
+          trace = "none",
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity")
+```
+
+
+Extract cluster information
+==============
+
+After performing hierarchical clustering and after cutting the dendrogram at a desired level, we extract assignments of cluster numbers to individual time series. 
+
+Step 1: hierarchical clustering
+
+```{r}
+clTree  <- mAllWide %>% 
+  stats::dist(., method = "euclidean") %>% 
+  stats::as.dist(.) %>% # conversion required because dtw_basic returns a cross-distance matrix; it is symmetric, thus we take the lower triangle
+  stats::hclust(., "complete") 
+
+str(clTree)
+```
+
+
+Extract cluster information (continued)
+==============
+
+Step 2: cut the dendrogram
+
+```{r}
+clAssign = dendextend::cutree(clTree, k = 6)
+head(clAssign)
+```
+
+
+Extract cluster information (continued 2)
+==============
+
+Convert named vector to a data table.
+
+```{r}
+dtClAssign = as.data.table(clAssign, keep.rownames = T)
+setnames(dtClAssign, c(lCol$trackiduni, lCol$clid))
+head(dtClAssign)
+```
+
+Extract cluster information (continued 3)
+==============
+
+Step 3: Merge original time series with cluster assignments for individual time series.
+
+```{r}
+dtAllCl = merge(dtAll, dtClAssign, by = lCol$trackiduni)
+
+# convert cluster label to a factor
+dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
+
+head(dtAllCl)
+```
+
+Exercise 7: plot time series per cluster
+=============
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r}
+dtAllCl = fread("./data/m5_allGF_wExpDescr_noNAs_noOut_norm0-20_cl.csv.gz")
+
+# convert cluster label to a factor
+dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
+```
+
+**Aim:** plot time series in each cluster, include the population mean
+
+
+Exercise 7: plot time series per cluster - solution
+=============
+
+```{r, fig.align='center', fig.width= 10, fig.height=5}
+ggplot(dtAllCl, aes_string(x = lCol$frame, 
+                                y = lCol$measNorm, 
+                                group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) +
+  stat_summary(
+      aes_string(y = lCol$measNorm, group = 1),
+      fun.y = mean,
+      geom = "line", group = 1,
+      colour = 'red', linetype = 'solid', size = 1) +
+  facet_wrap(lCol$clid) +
+  theme_minimal() +
+  labs(title = "Clusters of ERK activity dynamic responses",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("Time (min)") +
+  ylab("ERK activity (normalised)")
+```
+
+
+Exercise 8: contribution of clusters per condition 
+================
+
+**Aim:** calculate and plot the composition of experimental conditions with respect to clusters. 
+
+**Hint:** perform data aggregation to calculate the number of time series per group, per cluster. The shortcut to calculate the number of rows in `data.table` is `.N`, e.g.
+
+```{r, eval = F}
+dt[, .(nTimeSer = .N), by = group]
+```
+
+
+
+Exercise 8: contribution of clusters per condition - solution
+================
+Aggregate and assign the result to a new data table `dtAllClN`:
+
+```{r}
+dtAllClN = dtAllCl[, 
+                   .(ntc = .N), 
+                   by = c(lCol$treatGF, lCol$treatConc, lCol$clid)]
+
+dtAllClN[1:5]
+```
+
+
+Exercise 8: contribution of clusters per condition - solution (continued)
+================
+
+```{r}
+# for percentages on y-axis in ggplot
+require(scales)
+
+# The core plot: concentrations on the x-axis, the number of time series on y-axis
+p5 = ggplot(dtAllClN, aes_string(x = lCol$treatConc, y = "ntc"))
+
+# Facetting per growth factor
+p5 = p5 +
+  facet_wrap(lCol$treatGF)
+  
+# Stacked bar plot with bars coloured by cluster number
+# Bars are stretched to "fill" the y-axis using the option position = position_fill()
+p5 = p5 +
+  geom_bar(aes_string(fill = lCol$clid), 
+           stat = "identity", 
+           position = position_fill())
+
+# Convert y-axis labels to percentages (0-100%) instead of (0-1)
+p5 = p5 +
+  scale_y_continuous(labels = percent)
+```
+
+Exercise 8: contribution of clusters per condition - solution (continued 2)
+================
+
+```{r}
+# Use a nice colour palette for colour fill
+p5 = p5 +
+  scale_fill_manual("GF:", 
+                    values = ggthemes::tableau_color_pal("Color Blind")(6))
+  
+# Prettify the plot; add labels, etc
+p5 = p5 +
+  theme_minimal() +
+  labs(title = "Participation of clusters in experimental conditions",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("") + 
+  ylab("Percentage") +
+  theme(axis.text.x =  element_text(angle = 45, hjust = 1))
+```
+
+Exercise 8: contribution of clusters per condition - solution (continued 3)
+================
+
+
+```{r, fig.align='center', fig.width= 15, fig.height=10}
+p5
+```
+
+
+Clustering validation
+=======================
+
+Based on [Clustering Validation Statistics](http://www.sthda.com/english/wiki/print.php?id=241).
+
+Clustering is an **unsupervised** machine learning method for partitioning dataset into a set of groups or clusters. A big issue is that clustering methods will return clusters even if the data does not contain any clusters. Therefore, it’s necessary to:
+
+- assess clustering tendency before the analysis,,
+- validate the quality of the result after clustering.
+
+A variety of measures has been proposed in the literature for evaluating clustering results. The term clustering validation is used to design the procedure of evaluating the results of a clustering algorithm.
+
+
+
+Clustering validation (continued)
+=======================
+
+Generally, clustering validation statistics can be categorized into 4 classes (Theodoridis and Koutroubas, 2008; G. Brock et al., 2008, Charrad et al., 2014):
+
+**Relative clustering validation**, which evaluates the clustering structure by varying different parameter values for the same algorithm (e.g. varying the number of clusters k). It’s generally used for determining the optimal number of clusters.
+
+**External clustering validation**, which consists in comparing the results of a cluster analysis to an externally known result, such as externally provided class labels. Since we know the “true” cluster number in advance, this approach is mainly used for selecting the right clustering algorithm for a specific dataset.
+
+**Internal clustering validation**, which use the internal information of the clustering process to evaluate the goodness of a clustering structure without reference to external information. It can be also used for estimating the number of clusters and the appropriate clustering algorithm without any external data.
+
+**Clustering stability validation**, which is a special version of internal validation. It evaluates the consistency of a clustering result by comparing it with the clusters obtained after each column is removed, one at a time. Clustering stability measures will be described in a future chapter.
+
+
+Optimal number of clusters - Silhouette method
+====================
+```{r, fig.align='center'}
+
+require(factoextra)
+# Silhouette method
+factoextra::fviz_nbclust(mAllWide, hcut, method = "silhouette") +
+  labs(subtitle = "Silhouette method")
+
+```
+
+
+Optimal number of clusters - Gap statistics method
+====================
+```{r, fig.align='center'}
+# Gap statistic
+# nboot = 10 to keep the function speedy. 
+# recommended value: nboot= 500 for your analysis.
+# Use verbose = FALSE to hide computing progression.
+set.seed(123)
+factoextra::fviz_nbclust(mAllWide, hcut, method = "gap_stat",
+                         nstart = 25, nboot = 10)+
+  labs(subtitle = "Gap statistic method")
+```
+
+30 indices for choosing the best number of clusters
+====================================================
+We’ll use the package `NbClust` which will compute, with a single function call, 30 indices for deciding the right number of clusters in the dataset:
+
+```{r}
+require(NbClust)
+nb <- NbClust(mAllWide, 
+              distance = "euclidean", 
+              min.nc = 2, max.nc = 10, 
+              method = "complete", 
+              index ="all")
+```
+
+
+Visualise NbClust
+=================
+
+```{r, fig.align='center'}
+# Visualize the result
+factoextra::fviz_nbclust(nb) + theme_minimal()
+```
+
+Visualise clusters
+==================
+
+```{r, fig.align='center'}
+hc.res <- factoextra::eclust(mAllWide, 
+                             "hclust", k = 3, graph = FALSE,
+                             hc_method = "complete", 
+                             hc_metric = "euclidean")
+
+# Visualize clusters
+factoextra::fviz_cluster(hc.res, geom = "point", frame.type = "norm")
+
+```
+
+Visualise silhouette
+=======================
+
+```{r, fig.align='center'}
+factoextra::fviz_silhouette(hc.res)
+```
+
+
+Interactive clustering
+======================
+
+A free R/Shiny app available [here](https://github.com/dmattek/shiny-timecourse-inspector).
+
+![TCI](./presentation-images/tci-gui.png)
