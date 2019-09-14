@@ -206,19 +206,17 @@ Wide to long format
 
 Our data table is in the wide format. To convert it to long format, use the function `melt`. 
 
-Provide the names of **identification** (parameter `id.vars`) and *measure* variables (parameter `measure.vars`). If none are provided, `melt` guesses them automatically, which may result in a wrong conversion. Both variables can be given as strings with column names, or as column numbers.
+Provide the names of **identification** (`id.vars`) and **measure** variables (`measure.vars`). If none are provided, `melt` guesses them automatically, which may result in a wrong conversion. Both variables can be given as strings with column names, or as column numbers.
 
-The original data frame contained missing values. The option `na.rm=T` omits them in the long-format table.
+The original data frame contains missing values; `na.rm=T` omits them in the long-format table.
 
 ```{r}
 
 dtBabiesLong = data.table::melt(dtBabies, 
-                                id.vars = c('name', 'gender'), 
-                                measure.vars = 3:7,
-                                variable.name = 'year',
-                                value.name = 'weight',
+                                id.vars = c('name', 'gender'), measure.vars = 3:7,
+                                variable.name = 'year', value.name = 'weight',
                                 na.rm = T)
-dtBabiesLong
+head(dtBabiesLong, n = 5L)
 ```
 
 Long to wide
@@ -384,7 +382,7 @@ vsExpDescrCols = c("Position", "Channel", "Stim_Conc", "Stim_Treat")
 dtEGF = merge(dtEGF, dtEGFexp[, ..vsExpDescrCols], 
               by.x = c("Metadata_Series"), by.y = "Position")
 
-head(dtEGF)
+head(dtEGF, n = 3L)
 ```
 
 Complete data
@@ -530,7 +528,8 @@ Missing data (continued 3)
 setkeyv(dtAll, lCol$trackiduni)
 
 # calculate the number of time points of tracks with NA's
-dtAll[vsTracksWithNAs, .N, by = c(lCol$trackiduni)]
+head(
+  dtAll[vsTracksWithNAs, .N, by = c(lCol$trackiduni)], n = 12L)
 ```
 
 Exercise 3: identify missing data
@@ -638,8 +637,7 @@ There's no single recipe for handling outliers; it all depends on the analysis.
 
 A handy interactive tool written by Mauro Gwerder (our Bachelor student) can help with that process. The R/Shiny app can be downloaded from [here](https://github.com/maurogwerder/Outlier_app) and executed from RStudio.
 
-![OutlierApp](presentation-images/outlierApp.png)
-
+<img src="./presentation-images/outlierApp.png"; style="max-width:800px;float:center;">
 
 Handling outliers (continued)
 =================
@@ -769,10 +767,10 @@ ggplotly(p1)
 require(plotly)
 require(htmlwidgets)
 p1int = plotly::ggplotly(p1)
-htmlwidgets::saveWidget(as.widget(p1int), file = "plotly-widget.html", libdir = "widgets")
+htmlwidgets::saveWidget(as.widget(p1int), file = "widget-plotly.html", libdir = "widgets")
 ```
 
-<iframe src="plotly-widget.html" style="position:absolute;height:100%;width:100%"></iframe>
+<iframe src="widget-plotly.html" style="position:absolute;height:100%;width:100%"></iframe>
 
 
 Exercise 6: long to wide format
@@ -906,10 +904,10 @@ p2int = d3heatmap(mAllWide,
           col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
           xlab = "Time (min)", ylab = "Cells", key.xlab = "ERK activity")
 
-htmlwidgets::saveWidget(as.widget(p2int), file = "d3heatmap-widget.html", libdir = "widgets")
+htmlwidgets::saveWidget(as.widget(p2int), file = "widget-d3heatmap.html", libdir = "widgets")
 ```
 
-<iframe src="d3heatmap-widget.html" style="position:absolute;height:60%;width:70%"></iframe>
+<iframe src="widget-d3heatmap.html" style="position:absolute;height:75%;width:75%"></iframe>
 
 
 
@@ -1010,7 +1008,7 @@ dtAllCl = merge(dtAll, dtClAssign, by = lCol$trackiduni)
 # convert cluster label to a factor
 dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
 
-head(dtAllCl)
+head(dtAllCl, n = 3L)
 ```
 
 Exercise 7: plot time series per cluster
