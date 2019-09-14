@@ -15,42 +15,59 @@ This is an R notebook accompanying the [workshop](https://quantbio2019.epfl.ch) 
 
 In this analysis we will use following R packages:
 
-```{r}
+```{r, message=F}
 # load packages
+# input/output
+library(readxl, quietly = T)       # to read Excel files
+library(R.utils, quietly = T)      # to read compressed files directly without unzipping
 
-require(data.table, quietly = T)  # for fast processing of large datasets
-require(readxl, quietly = T)      # to read Excel files
-require(R.utils, quietly = T)     # to read compressed files directly without unzipping
+# data manipulation
+library(data.table, quietly = T)   # for fast processing of large datasets
+library(imputeTS, quietly = T)     # for data imputation
+library(dtwclust, quietly = T)     # for dynamics time warping
 
-require(imputeTS, quietly = T)    # for data imputation
+# cluster analysis
+library(NbClust)
+library(cluster)
+library(factoextra)
 
-require(ggplot2, quietly = T)     # to make amazing plots
-require(plotly, quietly = T)      # to make the amazing plots interactive
-require(gplots, quietly = T)      # for plotting heatmaps from clustering
-require(RColorBrewer, quietly = T) # for nice color palettes
+# visualisation
+library(ggplot2, quietly = T)      # to make amazing plots
+library(plotly, quietly = T)       # to make the amazing plots interactive
+library(gplots, quietly = T)       # for plotting heatmaps from clustering
+library(d3heatmap, quietly = T)    # for interactive heatmaps
+library(dendextend, quietly = T)   # for manipulating dendrograms
+library(RColorBrewer, quietly = T) # for nice color palettes
+library(scales, quietly = T)       # for percentages on y-axis in ggplot
+library(ggthemes, quietly = T)     # for additional ggplot themes and color palettes
 ```
 
-Set some global variables with parameters of the analysis:
+Set global variables with parameters of the analysis:
 
 ```{r}
 # set some global variables
 
 lPar = list(
-  dirRoot = ".",
-  dirData = "data",
-  freqAcq = 2 # acquisition frequency in minutes
-  
+  dirRoot = ".",     # path to root directory of this analysis
+  dirData = "data",  # path to data directory, relative to root
+  freqAcq = 2        # acquisition frequency in minutes
 )
 
 ```
 
+# R primer
+
+The *R for data Science* book and the accompanying [website](https://r4ds.had.co.nz) is an excellent resource to get acquainted with R and its applications to data science.
+
+[Here](https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html) is an intorduction to `data.table` package that we use extensively in this analysis. Some advanced tips and tricks with data.table are covered [here](http://brooksandrew.github.io/simpleblog/articles/advanced-data-table/).
+
 # Data description
 
-Data come from a microfluidic experiment where PC-12 cells were stimulated with 3 different growth factors (EGF, NGF, FGF2) at different concentrations. It is part of a study *Temporal perturbation of Erk dynamics reveals network architecture of FGF2-MAPK signaling*, (2019) available [here](https://doi.org/10.1101/629287).
+Data come from a microfluidic experiment where PC-12 cells were stimulated with 3 different growth factors (EGF, NGF, FGF2) at different concentrations. It comes from our recent publication *Temporal perturbation of ERK dynamics reveals network architecture of FGF2-MAPK signaling* (2019) available [here](https://doi.org/10.1101/629287).
 
-The microfluidic device has four separate channels, thus 4 different tretaments can be performed in a single experiment. 
+The microfluidic device has four separate channels, thus 4 different treatments can be performed in a single experiment. 
 
-The PC-12 cells express a FRET biosensor to indicate activity of the ERK kinase, an end point of the MAPK singnalling pathway. Three different growth factors tested activate different parts of the MAPK network and result in different signalling dynamics, i.e. the behavior of ERK activity over time. 
+The PC-12 cells express a FRET biosensor to indicate activity of the ERK kinase, an end point of the MAPK signalling pathway. Three different growth factors tested activate different parts of the MAPK network and result in different signalling dynamics, i.e. the behaviour of ERK activity over time. 
 
 Cells stimulated with growth factors were then imaged with a single-cell resolution over 3-4 hours at a 2-minute time resolution. Each channel of a microfluidic device was imaged at 4 different fields of view. Thus, we have 16 fields of view per experiment.
 
@@ -60,7 +77,7 @@ The folder `data` contains 3 sets of files that correspond to 3 growth factor tr
 
 - `Metadata_Series` an integer, 0-15, that corresponds to the field of view.
 - `Metadata_T` an integer, 0-100, corresponds to the time frame number in a movie from a single field of view.
-- `TrackObjects_Label` an integer that describes the track number from object tracking algorithm. The number is unique inly within a single field of view.
+- `TrackObjects_Label` an integer that describes the track number from object tracking algorithm. The number is unique only within a single field of view.
 - `Intensity_MeanIntensity_Ratio` a float with the measurement of FRET ratio; this is our proxy of ERK activity.
 
 
@@ -68,7 +85,7 @@ The folder `data` contains 3 sets of files that correspond to 3 growth factor tr
 
 - `Position` an integer, 0-15, with the number of the field of view.
 - `Channel` an integer, 1-4, with the number of the microfluidic channel.
-- `Stim_Conc` a string with an indication of the GF ocncentration.
+- `Stim_Conc` a string with an indication of the GF concentration.
 
 
 # Load data
@@ -77,10 +94,10 @@ The aim is to load 3 files that correspond to 3 GF treatments and to combine the
 
 ## Brute-force way
 
-Since we only have 3 files we can just load data as 3 separate variable and concatenate them later.
+Since we only have 3 files we can just load data into 3 separate variables and concatenate them later.
 
 ```{r}
-# Load individual files 
+# Load individual files into 3 separate variables
 dtEGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_EGFsust_exp20170316.csv.gz"))
 dtFGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_FGFsust_exp20170224.csv.gz"))
 dtNGF = fread(file.path(lPar$dirRoot, lPar$dirData, "original/tCoursesSelected_NGFsust_exp20170725.csv.gz"))
@@ -92,7 +109,7 @@ A quick peek into one of the tables reveals the content. There is no info about 
 head(dtEGF)
 ```
 
-All experimental data is in sepearate Excel files that we have to read as well.
+All experimental data is in separate Excel files that we have to read as well.
 
 ```{r}
 dtEGFexp = as.data.table(read_xlsx(file.path(lPar$dirRoot, lPar$dirData, "original/experimentDescription_EGFsust.xlsx")))
@@ -102,7 +119,7 @@ dtNGFexp = as.data.table(read_xlsx(file.path(lPar$dirRoot, lPar$dirData, "origin
 head(dtEGFexp)
 ```
 
-We have to merge experimental data with experiment description. The single-cell data stored in `dtXGF` contains only information about the field of view in a column `Metadata_Series`. Experimental data in `dtXGFexp` contains the information about the treatment for every field of view from the `Position` column. The merge operation will assign experiemntal description for every row in `dtXGF` by matching the field of view. As a result, the `dtXGF` will be expanded with additional columns with a description of the treatment.
+We have to merge experimental data with experiment description. The single-cell data stored in `dtXGF` contains only information about the field of view in a column `Metadata_Series`. Experimental data in `dtXGFexp` contains the information about the treatment for every field of view from the `Position` column. The merge operation will assign experimental description for every row in `dtXGF` by matching the field of view. As a result, the `dtXGF` will be expanded with additional columns with a description of the treatment.
 
 **Note:** we will use only some columns from the experimental description. 
 
@@ -119,7 +136,7 @@ head(dtEGF)
 
 ```
 
-Now, with 3 experimental results loaded and merged with experimental data, we can make a single data object. We will just "put" one dataset after another in a row-bind operation using `rbindlist` function.
+Now, with 3 experimental results loaded and merged with experimental data, we can make a single data object. We will just "put" one data-set after another in a row-bind operation using `rbindlist` function.
 
 ```{r error=TRUE}
 # let's make a list of our data tables
@@ -155,7 +172,7 @@ vsCommonColNames = Reduce(intersect, lColNames)
 vsCommonColNames
 ```
 
-Let's try row-bidning again but with an option `fill=TRUE` which fills NAs in columns that are not present. Then we will choose only common columns from each `dt`:
+Let's try row-binding again but with an option `fill=TRUE` which fills NA's in columns that are not present. Then we will choose only common columns from each `dt`:
 
 ```{r}
 # row-bind
@@ -177,7 +194,7 @@ This is a much more convenient way to batch read a large number of files.
 ```{r}
 # create a list of files to read by searching a folder for files according to a pattern
 vsInputFiles = list.files(path = file.path(lPar$dirRoot, lPar$dirData, "original"), 
-                          pattern = "*.csv", 
+                          pattern = "*.csv.gz", 
                           full.names = T)
 
 # apply a file-reading function to the list of file names
@@ -241,7 +258,7 @@ lExp = lapply(vsExpFiles, read_xlsx)
 dtExp = as.data.table(rbindlist(lExp))
 ```
 
-The merge of single-cell data with experimental description is done by treatment (`Stim_Treat`) and field of view (`Position` / `Metadata_Series` columns). We will use only some cilumns from `dtExp`.
+The merge of single-cell data with experimental description is done by treatment (`Stim_Treat`) and field of view (`Position` / `Metadata_Series` columns). We will use only some columns from `dtExp`.
 
 ```{r}
 vsExpDescrCols = c("Position", "Channel", "Stim_Conc", "Stim_Treat")
@@ -269,7 +286,7 @@ gzip(sFilePathTmp, overwrite = T)
 rm(sFilePathTmp)
 ```
 
-If your are completely lost, here's a file with the dataset resulting from previous steps:
+If your are completely lost, here's a file with the data-set resulting from previous steps:
 
 ```{r eval = F}
 dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m1_allGF_wExpDescr.csv.gz"))
@@ -288,25 +305,27 @@ lCol = list(
   frame = "Metadata_T",
   trackid = "TrackObjects_Label",
   meas = "Intensity_MeanIntensity_Ratio",
+  measNorm = "Intensity_MeanIntensity_Ratio_Norm",
   ch = "Channel",
   treatGF = "Stim_Treat",
   treatConc = "Stim_Conc",
-  trackiduni = "TrackObjects_Label_Uni" # we will add this column later to our data
+  trackiduni = "TrackObjects_Label_Uni", # we will add this column later to our data
+  clid = "Cluster_Label"
 )
 ```
 
-If required, column names can be changed only here and the remianing code can be left intact. Alternatively, column name definitions can be isolated to command line parameters or an external file that is read during script's execution.
+If required, column names can be changed only here and the remaining code can be left intact. Alternatively, column name definitions can be isolated to command line parameters or an external file that is read during script's execution.
 
-# Some maintanance
+# Some maintenance
 
-Before we proceed, let's **make our lives easier** and add a column with a unique track identifier. The current `TrackObjects_Label` column contains track id's that are unique only within a single field of view. To make them unique, we shall combine the `Stim_Treat`, `Metadata_Series`, and `TrackObjects_Label` columns into a string using the good old `sprintf` function.
+Before we proceed, let's **make our lives easier** and add a column with a unique track identifier. The current `TrackObjects_Label` column contains track ID's that are unique only within a single field of view. To make them unique, we shall combine the `Stim_Treat`, `Metadata_Series`, and `TrackObjects_Label` columns into a string using the good old `sprintf` function.
 
 ```{r}
 dtAll[, (lCol$trackiduni) := sprintf("%s_%02d_%04d", get(lCol$treatGF), get(lCol$fov), get(lCol$trackid))]
 head(dtAll)
 ```
 
-A unique track id will allow us to easily pick individual time series, plot them, etc.
+A unique track ID will allow us to easily pick individual time series, plot them, etc.
 
 Another step to make our lives easier is to [key the data table](https://stackoverflow.com/questions/20039335/what-is-the-purpose-of-setting-a-key-in-data-table). By setting a key to the unique track id, we will be able to easily subset our data as we shall see in a moment.
 
@@ -375,7 +394,7 @@ Let's have a look at the min and max of the number of time points per time serie
 summary(dtAll[, .N, by = c(lCol$trackiduni)][["N"]])
 ```
 
-Some rows with time points are completely missing; there's not even NA in the measurement column. We will add these rows and set NA's to the measurement. Then we will interopolate.
+Some rows with time points are completely missing; there's not even NA in the measurement column. We will add these rows and set NA's to the measurement. Then we will interpolate.
 
 To *stretch* the data we will use a neat solution based on [this](https://stackoverflow.com/a/44686705/1898713). Just accept that it works...
 
@@ -404,7 +423,7 @@ rm(dtTmp)
 
 ### Data imputation
 
-We have many more rows with measurments set to NA:
+We have many more rows with measurements set to NA:
 
 ```{r}
 head(dtAll[is.na(get(lCol$meas))], 10)
@@ -437,10 +456,10 @@ gzip(sFilePathTmp, overwrite = T)
 rm(sFilePathTmp, dtTmp, vsGroupingCols, vsTracksWithNAs)
 ```
 
-If your are completely lost, here's a file with the dataset resulting from previous steps:
+If your are completely lost, here's a file with the data-set resulting from previous steps:
 
 ```{r eval = F}
-dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m2_allGF_wExpDescr_noNAs.csv"))
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m2_allGF_wExpDescr_noNAs.csv.gz"))
 ```
 
 
@@ -480,13 +499,13 @@ dtAll[, (lCol$meas) := na_interpolation(get(lCol$meas)), by = c(lCol$trackiduni)
 
 ## Dynamic outliers
 
-Let's remove entire trajectories if the measurment is below **1000**:
+Let's remove entire trajectories if the measurement is below **1000**:
 
 ```{r}
 # vector with unique track id's of dynamic outliers
 vsTrackOut = unique(dtAll[get(lCol$meas) < 1000][[lCol$trackiduni]])
 
-# leave only tracks that are not in th eoutlier vector
+# leave only tracks that are not in the outlier vector
 dtAll = dtAll[!(get(lCol$trackiduni) %in% vsTrackOut)]
 
 # clean
@@ -511,25 +530,88 @@ gzip(sFilePathTmp, overwrite = T)
 rm(sFilePathTmp)
 ```
 
-If your are completely lost, here's a file with the dataset resulting from previous steps:
+If your are completely lost, here's a file with the data-set resulting from previous steps:
 
 ```{r eval = F}
-dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m3_allGF_wExpDescr_noNAs_noOut.csv"))
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m3_allGF_wExpDescr_noNAs_noOut.csv.gz"))
 ```
 
-# Plotting (coninued)
+# Plotting (continued)
 
 ## Plot per condition
 
 ```{r}
-p1 = p0 +
-  facet_grid(Stim_Treat ~ Stim_Conc)
+# same as above; repeated for convenience
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, y = lCol$meas, group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) # parameter alpha adds transparency
 
-# The facet_grid accepts a formula with column names; the equivalent to use vasriables with column names is:
+# The facet_grid accepts a formula with column names, e.g.
+# facet_grid(Stim_Treat ~ Stim_Conc)
+# An equivalent solution to use variables with string column names is:
 # facet_grid(as.formula(paste0(lCol$treatGF, "~", lCol$treatConc)))
+# Or, to use reformulate function that creates a formula from strings
+p1 = p0 +
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
+
 
 p1
 ```
+
+
+## Normalisation
+
+The baseline level before stimulation is very heterogeneous (due to biological and technical noise). At this stage, we do not care about that variability, we only want to cluster the responses. Thus, we might get better results by normalising every time series to its baseline (i.e. first 20 time points).
+
+```{r}
+# add a column with the mean of the beasline for every time series
+dtAll[, 
+      baseline := mean(.SD[1:20, get(lCol$meas)]), # add a new column with the mean of first 20 rows of the group
+      by = c(lCol$trackiduni)] # group by unique trajectory
+
+# add a column with normalized measurement
+dtAll[,
+      (lCol$measNorm) := get(lCol$meas) / baseline]
+
+# remove baseline column
+dtAll[, baseline := NULL]
+```
+
+
+Plot per condition using normalized data
+
+```{r}
+# same as above; repeated for convenience
+p0 = ggplot(dtAll, aes_string(x = lCol$frame, y = lCol$measNorm, group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) # parameter alpha adds transparency
+
+p1 = p0 +
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
+
+p1
+```
+
+# Milestone 4
+Let's save the resulting data as a milestone for future reference:
+
+```{r eval = F}
+sFilePathTmp = file.path(lPar$dirRoot, lPar$dirData, "m4_allGF_wExpDescr_noNAs_noOut_norm0-20.csv")
+
+fwrite(x = dtAll, file = sFilePathTmp, row.names = F)
+
+# Compress the file to save space
+gzip(sFilePathTmp, overwrite = T)
+
+rm(sFilePathTmp)
+```
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r eval = F}
+dtAll = fread(file.path(lPar$dirRoot, lPar$dirData, "m4_allGF_wExpDescr_noNAs_noOut_norm0-20.csv.gz"))
+```
+
+
+# Plotting (continued 2)
 
 ## Adding stats
 
@@ -538,7 +620,7 @@ p1
 ```{r}
 p2 = p1 +
   stat_summary(
-      aes_string(y = lCol$meas, group = 1),
+      aes_string(y = lCol$measNorm, group = 1),
       fun.y = mean,
       colour = 'red',
       linetype = 'solid',
@@ -556,7 +638,7 @@ p2
 ```{r}
 p3 = p2 +
     stat_summary(
-      aes_string(y = lCol$meas, group = 1),
+      aes_string(y = lCol$measNorm, group = 1),
       fun.data = mean_cl_normal,
       colour = 'red',
       alpha = 0.25,
@@ -574,7 +656,7 @@ For the sake of clarity, we choose only one condition for plotting:
 ```{r}
 pInt = ggplot(dtAll[get(lCol$treatGF) == "NGF" & get(lCol$treatConc) == "0.25 ng/ml"], 
               aes_string(x = lCol$frame, 
-                         y = lCol$meas, 
+                         y = lCol$measNorm, 
                          group = lCol$trackiduni)) +
   geom_path(alpha = 0.1) +
   facet_grid(Stim_Treat ~ Stim_Conc)
@@ -583,7 +665,7 @@ ggplotly(pInt)
 ```
 
 
-## Beautifying ggplots
+## Beautifying plots
 
 Add themes, e.g. `+ theme_bw()`, or themes available in packages such as `ggthemes`. 
 
@@ -601,18 +683,16 @@ p3 +
 ```
 
 
-# Clustering
+# Hierarchical clustering
 
-## Hierarchical clustering
+The package `gplots` offers a handy function `heatmap.2` to plot the heat-map and to cluster data. To use it we need to provide our single-cell dataset in a wide format as a matrix. Such a matrix contains individual time series as rows. Columns correspond to time points.
 
-We will use a standard R function `hclust` to perform hierarchical clustering. The first and only required argument of that function is a matrix with all pairwise distances between the time series. We obtain such a matrix with a `dist` function, which requires the data in a wide format. To convert from long to wide format we use `dcast` function.
-
-### Convert from long to wide format
+## Convert from long to wide format
 
 ```{r}
 # long to wide format
 # every row corresponds to a single time series; column are time points
-dtAllWide = dcast(dtAll, TrackObjects_Label_Uni ~ Metadata_T, value.var = "Intensity_MeanIntensity_Ratio")
+dtAllWide = dcast(dtAll, TrackObjects_Label_Uni ~ Metadata_T, value.var = lCol$measNorm)
 
 # obtain row names for later
 vsRowNames = dtAllWide[[lCol$trackiduni]]
@@ -623,6 +703,125 @@ mAllWide = as.matrix(dtAllWide[, -1])
 # assign row names to the matrix (useful for later plotting heatmaps from clustering)
 rownames(mAllWide) = vsRowNames
 ```
+
+
+## Plotting the heat-map
+
+```{r}
+heatmap.2(mAllWide)
+```
+
+We need to tune the default parameters. First, we only want to cluster according to rows only. Clustering according to columns doesn't make sense for us because these are time points whose order we need to maintain in the plot. 
+
+Tune: 
+
+- the dendrogram for columns can be removed with the option `dendrogram = "row"` and clustering according to columns is removed with `Colv = F`,
+- display density of measured values on the colour key with `density.info = "density"`,
+- apply a custom palette, `col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99))`.
+- add labels with `xlab`, `ylab`, and `key.lab`.
+
+```{r, fig.width= 8, fig.height=10}
+heatmap.2(mAllWide, 
+          dendrogram = "row",
+          Colv = F,
+          trace = "none",
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity"
+          )
+```
+
+
+## Piping
+Before we proceed, let's introduce a very handy concept in R called *piping*. Pipes are an operator, `%>%`, and allow to express a sequence of operations without creating intermediate variables. The pipe operator comes with the **magrittr** package, which is loaded automatically by **tidyverse** packages.
+
+## Colour dendrogram branches
+
+```{r, fig.width= 8, fig.height=10}
+
+# create a coloured dendrogram using a given distance and a linkage method
+myRowDend  <- mAllWide %>% 
+  proxy::dist(., "euclidean") %>% # calculate distance
+  stats::hclust(., "complete") %>% # create a dendrogram
+  stats::as.dendrogram(.) %>%
+  dendextend::set("branches_k_color", k = 4) %>% # color k main branches
+  dendextend::set("branches_lwd", 2) %>% # set line width of the dendrogram
+  dendextend::ladderize(.) # reorganize the dendrogram
+
+heatmap.2(mAllWide, 
+          dendrogram = "row",
+          Rowv = myRowDend, # use our coloured dendrogram to order rows
+          Colv = F,
+          trace = "none",
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity"
+          )
+```
+
+
+## Shape clustering
+
+Above approaches treat individual time points as independent measurements. Instead, shape clustering such as Dynamic Time Warping (DTW) is suited for calculating distances between time series.
+
+Some resources:
+
+- Time series clustering with Dynamic Time Warping ([link](https://damien-datasci-blog.netlify.com/post/time-series-clustering-with-dynamic-time-warp/)).
+- Comparing Time-Series Clustering Algorithms in R Using the dtwclust Package ([link](https://cran.r-project.org/web/packages/dtwclust/vignettes/dtwclust.pdf)).
+- Calculating a distance matrix by dtw ([link(https://stackoverflow.com/questions/49500668/calculating-a-distance-matrix-by-dtw/50776685#50776685)]).
+
+```{r, fig.width= 8, fig.height=10}
+
+# From: https://stackoverflow.com/a/50776685/1898713
+
+myRowDend  <- mAllWide %>% 
+  proxy::dist(., method = "dtw_basic", pattern = symmetric1, norm = "L1", window.size = 10L) %>% 
+  stats::as.dist(.) %>% # conversion required because dtw_basic returns a cross-distance matrix; it is symmetric, thus we take the lower triangle
+  stats::hclust(., "complete") %>% 
+  stats::as.dendrogram(.) %>%
+  dendextend::set("branches_k_color", k = 5) %>% 
+  dendextend::set("branches_lwd", 2) %>%
+  dendextend::ladderize(.)
+
+heatmap.2(mAllWide, 
+          dendrogram = "row",
+          Rowv = myRowDend,
+          Colv = F,
+          trace = "none",
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity"
+          )
+```
+
+
+## Interactive heat-maps
+
+```{r, fig.width= 8, fig.height=10}
+d3heatmap(mAllWide,
+          dendrogram = "row",
+          Rowv = myRowDend,
+          Colv = F,
+          trace = "none",
+          show_grid = F,
+          density.info = "density",
+          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)),
+          xlab = "Time (min)",
+          ylab = "Cells", 
+          key.xlab = "ERK activity")
+```
+
+
+
+## Distance and linkage methods
+
+We will use a standard R function `hclust` to perform hierarchical clustering. The first and only required argument of that function is a matrix with all pairwise distances between the time series. We obtain such a matrix with a `dist` function, which requires data in a wide format.
 
 ### Distance matrix
 
@@ -635,36 +834,225 @@ mDist = dist(mAllWide, method = "euclidean")
 
 ```{r}
 clRes = hclust(mDist, method = "complete")
+```
+
+## Extract clusters
+
+After performing hierarchical clustering and after cutting the dendrogram at a desired level, we shall extract assignments of cluster numbers to individual time series. 
+
+
+Step 1: hierarchical clustering
+
+```{r}
+clTree  <- mAllWide %>% 
+  proxy::dist(., method = "dtw_basic", pattern = symmetric1, norm = "L1", window.size = 10L) %>% 
+  stats::as.dist(.) %>% # conversion required because dtw_basic returns a cross-distance matrix; it is symmetric, thus we take the lower triangle
+  stats::hclust(., "complete") 
+
 str(clRes)
 ```
 
-### Plot
+Step 2: cut the dendrogram
 
 ```{r}
-heatmap.2(mAllWide)
+clAssign = dendextend::cutree(clTree, k = 6)
+head(clAssign)
 ```
 
-Remove unnecessary stuff: the dendrogram for columns
+Convert named vector to a data table.
 
-```{r, fig.width= 8, fig.height=10}
-heatmap.2(mAllWide, 
-          trace = "none",
-          Colv = "Null", 
-          density.info = "density",
-          col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(99)))
+```{r}
+dtClAssign = as.data.table(clAssign, keep.rownames = T)
+setnames(dtClAssign, c(lCol$trackiduni, lCol$clid))
+head(dtClAssign)
+```
+
+Step 3: Merge original time series with cluster assignments for individual time series.
+
+```{r}
+dtAllCl = merge(dtAll, dtClAssign, by = lCol$trackiduni)
+
+# convert cluster label to a factor
+dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
+```
+
+# Milestone 5
+Let's save the resulting data as a milestone for future reference:
+
+```{r eval = F}
+sFilePathTmp = file.path(lPar$dirRoot, lPar$dirData, "m5_allGF_wExpDescr_noNAs_noOut_norm0-20_cl.csv")
+
+fwrite(x = dtAllCl, file = sFilePathTmp, row.names = F)
+
+# Compress the file to save space
+gzip(sFilePathTmp, overwrite = T)
+
+rm(sFilePathTmp)
+```
+
+If your are completely lost, here's a file with the dataset resulting from previous steps:
+
+```{r eval = F}
+dtAllCl = fread(file.path(lPar$dirRoot, lPar$dirData, "m5_allGF_wExpDescr_noNAs_noOut_norm0-20_cl.csv.gz"))
 ```
 
 
-## Interactive heatmaps
+# Plot clusters
 
-## K-means
+## Time series per cluster
 
-## Measures of clustering quality
+```{r}
+p4 = ggplot(dtAllCl, aes_string(x = lCol$frame, 
+                                y = lCol$measNorm, 
+                                group = lCol$trackiduni)) +
+  geom_path(alpha = 0.1) +
+  stat_summary(
+      aes_string(y = lCol$measNorm, group = 1),
+      fun.y = mean,
+      colour = 'red',
+      linetype = 'solid',
+      size = 1,
+      geom = "line",
+      group = 1) +
+  facet_wrap(lCol$clid) +
+  theme_minimal() +
+  labs(title = "Clusters of ERK activity dynamic responses sustained GF treatments",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("Time (min)") +
+  ylab("ERK activity (normalised)")
 
-# Advanced topics
+p4
+```
 
-## Command-line parameters
+## Distribution per condition
+
+Now we would like to see which clusters comprise experimental conditions. To achieve that, we perform a simple data aggregation where we calculate the number of time series per group, per cluster:
+
+```{r}
+dtAllClN = dtAllCl[, .(ntc = .N), by = c(lCol$treatGF, lCol$treatConc, lCol$clid)]
+```
+
+Let's create this plot step by step and use a colour-blind-friendly palette:
+
+```{r}
+# The core plot: concentrations on the x-axis, the number of time series on y-axis
+p5 = ggplot(dtAllClN, aes_string(x = lCol$treatConc, y = "ntc"))
+
+# Facetting per growth factor
+p5 = p5 +
+  facet_wrap(lCol$treatGF)
+  
+# Stacked bar plot with bars coloured by cluster number
+# Bars are stretched to "fill" the y-axis using the option position = position_fill()
+p5 = p5 +
+  geom_bar(aes_string(fill = lCol$clid), 
+           stat = "identity", 
+           position = position_fill())
+
+# Convert y-axis labels to percentages (0-100%) instead of (0-1)
+p5 = p5 +
+  scale_y_continuous(labels = percent)
+
+# Use a nice colour palette for colour fill
+p5 = p5 +
+  scale_fill_manual("GF:", values = ggthemes::tableau_color_pal("Color Blind")(6))
+  
+# Prettify the plot; add labels, etc
+p5 = p5 +
+  theme_minimal() +
+  labs(title = "Participation of clusters in experimental conditions",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("") +
+  ylab("Percentage") +
+  theme(axis.text.x =  element_text(angle = 45, hjust = 1))
+
+p5
+```
+
+
+# Clustering validation
+
+Based on [Clustering Validation Statistics](http://www.sthda.com/english/wiki/print.php?id=241).
+
+## Optimal number of clusters - Silhouette method
+
+```{r}
+# Silhouette method
+factoextra::fviz_nbclust(mAllWide, hcut, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+```
+
+## Optimal number of clusters - Elbow method
+
+```{r}
+# Elbow method
+factoextra::fviz_nbclust(mAllWide, hcut, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)+
+  labs(subtitle = "Elbow method")
+```
 
 
 
+## Optimal number of clusters - Gap statistic method
+
+```{r}
+# Gap statistic
+# nboot = 10 to keep the function speedy. 
+# recommended value: nboot= 500 for your analysis.
+# Use verbose = FALSE to hide computing progression.
+set.seed(123)
+factoextra::fviz_nbclust(mAllWide, hcut, nstart = 25,  method = "gap_stat", nboot = 10)+
+  labs(subtitle = "Gap statistic method")
+```
+
+
+## 30 indices for choosing the best number of clusters
+
+```{r}
+nb <- NbClust::NbClust(mAllWide, 
+              distance = "euclidean", 
+              min.nc = 2, max.nc = 10, 
+              method = "complete", 
+              index ="all")
+```
+
+
+```{r}
+# Visualize the result
+factoextra::fviz_nbclust(nb) + theme_minimal()
+```
+
+
+## Clustering analysis
+
+```{r}
+hc.res <- factoextra::eclust(mAllWide, "hclust", k = 3, 
+                 hc_method = "complete", hc_metric = "euclidean",
+                 graph = FALSE)
+```
+
+```{r}
+# Visualize clusters
+factoextra::fviz_cluster(hc.res, geom = "point", frame.type = "norm")
+
+```
+
+
+```{r}
+factoextra::fviz_silhouette(hc.res)
+```
+
+
+## Silhouette analysis
+
+```{r}
+sil <- cluster::silhouette(hc.res$cluster, dist(mAllWide))
+head(sil[, 1:3], 10)
+```
+
+```{r}
+# Silhouette plot
+factoextra::fviz_silhouette(sil)
+```
 
