@@ -1,6 +1,6 @@
 ---
-title: "Analysis of ERK dynamics in response to EGF/NGF/FGF2 stimulations"
-author: "Maciej Dobrzyński"
+title: "Processing and clustering of time series from single-cell time-lapse microscopy"
+author: "Maciej Dobrzyński (Intitute of Cell Biology, University of Bern)"
 email: maciej.dobrzynski@izb.unibe.ch
 date: "September 15, 2019"
 output: 
@@ -11,9 +11,9 @@ output:
     toc: yes
 ---
 
-This is an R notebook accompanying the [workshop](https://quantbio2019.epfl.ch) *QUANTITATIVE BIOLOGY: BRIDGING THE GAP BETWEEN COMPUTATIONAL AND EXPERIMENTAL APPROACHES (EPFL – ETHZ SUMMER SCHOOL 2019) QUANTBIO2019*.
+This R notebook accompanies the **QUANTBIO2019** [workshop](https://quantbio2019.epfl.ch): *BRIDGING THE GAP BETWEEN COMPUTATIONAL AND EXPERIMENTAL APPROACHES* (EPFL – ETHZ Summer School 2019, Fiesch, Switzerland).
 
-In this analysis we will use following R packages:
+We will use the following R packages:
 
 ```{r, message=F}
 # load packages
@@ -658,8 +658,7 @@ pInt = ggplot(dtAll[get(lCol$treatGF) == "NGF" & get(lCol$treatConc) == "0.25 ng
               aes_string(x = lCol$frame, 
                          y = lCol$measNorm, 
                          group = lCol$trackiduni)) +
-  geom_path(alpha = 0.1) +
-  facet_grid(Stim_Treat ~ Stim_Conc)
+  geom_path(alpha = 0.1)
 
 ggplotly(pInt)
 ```
@@ -677,6 +676,33 @@ Use `+ xlab()` or `+ ylab()` to control labels of x and y axes.
 p3 +
   theme_minimal() +
   labs(title = "ERK activity in response to sustained GF treatments",
+       caption = paste0("Created on ", Sys.Date())) +
+  xlab("Time (min)") +
+  ylab("ERK activity")
+```
+
+## Plotting amplitude at selected time points
+
+```{r}
+# define a vector with selected time points
+vnTpts = c(10, 25, 50)
+
+# plot
+ggplot(dtAll[get(lCol$frame) %in% vnTpts], 
+       aes_string(x = paste0("as.factor(", lCol$frame, ")"), y = lCol$measNorm)) +
+  # geom_dotplot(binaxis = "y", 
+  #              stackdir = "center", 
+  #              position = "dodge",
+  #              alpha = 0.1, 
+  #              binwidth = .008, 
+  #              binpositions = "all") +
+  geom_violin(aes_string(fill = paste0("as.factor(", lCol$frame, ")"))) +
+  geom_boxplot(fill = NA,
+               outlier.shape = NA) + 
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc)) +
+  scale_fill_discrete("Time (min):") +
+  theme_minimal() +
+  labs(title = "Distribution of ERK activity at selected time points",
        caption = paste0("Created on ", Sys.Date())) +
   xlab("Time (min)") +
   ylab("ERK activity")
