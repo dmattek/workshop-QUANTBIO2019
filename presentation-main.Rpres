@@ -835,7 +835,7 @@ geom_dotplot(binaxis = "y",
 Exercise 7: time point snapshots - solution
 ================================
 
-```{r}
+```{r, fig.align='center', fig.width= 12, fig.height=8}
 ggplot(dtAll[get(lCol$frame) %in% c(10, 25, 50)], 
        aes(x = as.factor(Metadata_T), 
            y = Intensity_MeanIntensity_Ratio_Norm)) +
