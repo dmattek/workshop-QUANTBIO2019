@@ -14,23 +14,42 @@
 }
 </style>
 
-From experimental data to plots
+QUANTBIO2019: Processing and clustering of time series from single-cell time-lapse microscopy
 ========================================================
-author: Maciej Dobrzynski
+author: Maciej Dobrzynski (Intitute of Cell Biology, University of Bern)
 date: September 15, 2019
 width: 1600
 height: 900
 
-Some context about data from our lab
+Some context about our lab
 ====================================
 
-- Lot's of time-lapse microscopy experiments: taking movies of many cells
+- Time-lapse microscopy experiments: taking movies of many cells
 - Cells have fluorescent biosensors that measure activities of proteins
 - We look at the dynamics of protein activity
 - Movies are processed to identify cells, measure the fluorescent signal, track cells over time
 - The reulting data: thousands of time series
 - Batch image analysis on a computing cluster generates lot's of CSV files
 - Postprocessing: merging files from different experimental conditions, cleaning data from outliers, pulling experimental description from other files
+
+Roadmap for this workshop
+=========================
+
+The **aim** of this workshop is to process raw time-series data from time-lapse microscopy experiment. We will:
+
+- load data, merg different data sources,
+- clean missing data and outliers,
+- plot different data cuts,
+- perform hierarchical clustering,
+- validate clusters.
+
+Intermediate data sets throughout the workshop:
+
+- [Milestone 1](#/m1): complete merged data from all experiments
+- [Milestone 2](#/m2): the above + missing data interpolated
+- [Milestone 3](#/m3): the above + outliers removed
+- [Milestone 4](#/m4): the above + normalised trajectories
+- [Milestone 5](#/m5): the above + cluster numbers assigned to individual time series
 
 
 RStudio Projects
@@ -331,6 +350,7 @@ A single set from a single experiment includes:
 
 Exercise 1: read data
 =====================
+id: ex1
 
 **Aim:**
 read data from a single experiment. Merge single-cell measurements of the EKAR biosensor fluorescence intensity with experimental description.
@@ -409,8 +429,9 @@ dtAll = rbindlist(lData, use.names = T, idcol = "Stim_Treat")
 
 **Caveat**: not all files have the same columns!
 
-Complete data (continued)
+Milestone 1
 ========================
+id: m1
 
 Fetch the data for all growth factors and experiment description from a **Milestone 1** file:
 
@@ -459,6 +480,7 @@ In fact, these measurements are **outliers**.
 
 Exercise 2: unique time series ID's
 =======================
+id: ex2
 
 Before we proceed, let's **make our lives easier** and add a column with a unique track identifier. The current `TrackObjects_Label` column contains track ID's that are unique only within a single field of view. To make them unique, we shall combine the `Stim_Treat`, `Metadata_Series`, and `TrackObjects_Label` columns into a single string.
 
@@ -534,6 +556,7 @@ head(
 
 Exercise 3: identify missing data
 ============
+id: ex3
 
 Looks like we have another problem... The track `FGF_08_0011` has one time point less than others. The entire row with the measurement is missing!
 
@@ -564,6 +587,10 @@ In our case:
 - We will *stretch* the data to introduce `NA's` for time points that miss data entirely. A neat solution is based on [this](https://stackoverflow.com/a/44686705/1898713).
 - Interpolate `NA's` using `na_interpolation` function from `imputeTS` package.
 
+Milestone 2
+===========
+id: m2
+
 Fetch the dataset with interpolated `NA's` from **Milestone 2**:
 
 ```{r}
@@ -585,6 +612,7 @@ p0
 
 Exercise 4A: remove point outliers
 ==================================
+id: ex4a
 
 We have outliers... Actually, two types of outliers. Some time series have single time points that are way above the average. There are also several time series that are behaving entirely differently to the rest, so called *dynamic outliers*.
 
@@ -610,6 +638,7 @@ dtAll[,
 
 Exercise 4B: remove dynamics outliers
 ======================================
+id: ex4b
 
 **Aim:** remove entire trajectories if the measurement is below **1000**.
 
@@ -637,10 +666,11 @@ There's no single recipe for handling outliers; it all depends on the analysis.
 
 A handy interactive tool written by Mauro Gwerder (our Bachelor student) can help with that process. The R/Shiny app can be downloaded from [here](https://github.com/maurogwerder/Outlier_app) and executed from RStudio.
 
-<img src="./presentation-images/outlierApp.png"; style="max-width:800px;float:center;">
+<img src="./presentation-images/gui-outlierapp.png"; style="max-width:800px;float:center;">
 
-Handling outliers (continued)
+Milestone 3
 =================
+id: m3
 
 Fetch the dataset without outliers from **Milestone 3**:
 
@@ -664,6 +694,7 @@ p0
 
 Exercise 5: normalisation
 =========================
+id: ex5
 
 The baseline level before stimulation is very heterogeneous (due to biological and technical noise). At this stage, we do not care about that variability, we only want to cluster the responses. Thus, we might get better results by normalising every time series to its baseline (i.e. first 20 time points).
 
@@ -694,13 +725,17 @@ dtAll[,
 dtAll[, baseline := NULL]
 ```
 
+Milestone 4
+===========
+id: m4
+
 Fetch the dataset with normalised measurement column from **Milestone 4**:
 
 ```{r}
 dtAll = fread("./data/m4_allGF_wExpDescr_noNAs_noOut_norm0-20.csv.gz")
 ```
 
-Exercise 5: normalisation - solution (continued)
+Plot normalised data
 ====================================
 
 Plot per condition using normalized data
@@ -715,7 +750,7 @@ p0 = ggplot(dtAll, aes_string(x = lCol$frame,
 p0
 ```
 
-Adding the mean to the plot
+Add mean to the plot
 ========================================
 
 ```{r, fig.align='center', fig.width= 12, fig.height=6}
@@ -750,6 +785,7 @@ p1 +
 
 Exercise 6: interactive plots
 =============================
+id: ex6
 
 **Aim:** make an interactive plot
 
@@ -772,9 +808,47 @@ htmlwidgets::saveWidget(as.widget(p1int), file = "widget-plotly.html", libdir = 
 
 <iframe src="widget-plotly.html" style="position:absolute;height:100%;width:100%"></iframe>
 
+Exercise 7: time point snapshots
+================================
+id: ex7
 
-Exercise 6: long to wide format
+**Aim:** plot ERK activity at selected time points: baseline, peak, relaxation period. Visualise as box-, dot-, violin plots, or their combination.
+
+**Hint:** Use `%in` syntax to select rows, e.g.
+
+```{r, eval = F}
+dt[frame %in% c(10, 20, 30)]
+```
+
+Use `ggplot2` functions:
+
+```{r, eval = F}
+geom_boxplot()
+geom_violin()
+geom_dotplot(binaxis = "y", 
+             stackdir = "center", 
+             position = "dodge",
+             binwidth = .01, 
+             binpositions = "all)
+```
+
+Exercise 7: time point snapshots - solution
+================================
+
+```{r}
+ggplot(dtAll[get(lCol$frame) %in% c(10, 25, 50)], 
+       aes(x = as.factor(Metadata_T), 
+           y = Intensity_MeanIntensity_Ratio_Norm)) +
+  geom_violin(fill = NA) +
+  geom_boxplot(fill = NA,
+               outlier.shape = NA) +
+  facet_grid(reformulate(lCol$treatGF, lCol$treatConc))
+```
+
+
+Exercise 8: long to wide format
 ===============================
+id: ex8
 
 In order to cluster data and to plot the results of clustering as a heatmap we will use a handy function `heatmap.2` from `gplots` package.
 
@@ -784,7 +858,7 @@ To do so, we need to convert `dtAll` from long to a wide format as a matrix. Suc
 
 **Hint:** use `dcast` function.
 
-Exercise 6: long to wide format - solution
+Exercise 8: long to wide format - solution
 ===============================
 
 ```{r}
@@ -1011,8 +1085,9 @@ dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
 head(dtAllCl, n = 3L)
 ```
 
-Exercise 7: plot time series per cluster
-=============
+Milestone 5
+===========
+id: m5
 
 If your are completely lost, here's a file with the dataset resulting from previous steps:
 
@@ -1023,10 +1098,16 @@ dtAllCl = fread("./data/m5_allGF_wExpDescr_noNAs_noOut_norm0-20_cl.csv.gz")
 dtAllCl[, (lCol$clid) := as.factor(get(lCol$clid))]
 ```
 
+Exercise 9: plot time series per cluster
+=============
+id: ex9
+
 **Aim:** plot time series in each cluster, include the population mean
 
+**Hint:** use facetting per cluster
 
-Exercise 7: plot time series per cluster - solution
+
+Exercise 9: plot time series per cluster - solution
 =============
 
 ```{r, fig.align='center', fig.width= 10, fig.height=5}
@@ -1047,8 +1128,9 @@ ggplot(dtAllCl, aes_string(x = lCol$frame, y = lCol$measNorm,
 ```
 
 
-Exercise 8: contribution of clusters per condition 
+Exercise 10: contribution of clusters per condition 
 ================
+id: ex10
 
 **Aim:** calculate and plot the composition of experimental conditions with respect to clusters. 
 
@@ -1060,7 +1142,7 @@ dt[, .(nTimeSer = .N), by = group]
 
 
 
-Exercise 8: contribution of clusters per condition - solution
+Exercise 10: contribution of clusters per condition - solution
 ================
 Aggregate and assign the result to a new data table `dtAllClN`:
 
@@ -1073,7 +1155,7 @@ dtAllClN[1:5]
 ```
 
 
-Exercise 8: contribution of clusters per condition - solution (continued)
+Exercise 10: contribution of clusters per condition - solution (continued)
 ================
 
 ```{r}
@@ -1099,7 +1181,7 @@ p5 = p5 +
   scale_y_continuous(labels = percent)
 ```
 
-Exercise 8: contribution of clusters per condition - solution (continued 2)
+Exercise 10: contribution of clusters per condition - solution (continued 2)
 ================
 
 ```{r}
@@ -1118,7 +1200,7 @@ p5 = p5 +
   theme(axis.text.x =  element_text(angle = 45, hjust = 1))
 ```
 
-Exercise 8: contribution of clusters per condition - solution (continued 3)
+Exercise 10: contribution of clusters per condition - solution (continued 3)
 ================
 
 
@@ -1229,4 +1311,4 @@ Interactive clustering
 
 A free R/Shiny app available [here](https://github.com/dmattek/shiny-timecourse-inspector).
 
-<img src="./presentation-images/tci-gui.png"; style="max-width:800px;float:center;">
+<img src="./presentation-images/gui-tci.png"; style="max-width:800px;float:center;">
