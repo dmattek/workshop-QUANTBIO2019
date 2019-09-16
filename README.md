@@ -1,6 +1,18 @@
-# Presentation and code to accompany the QUANTBIO2019 workshop in Fiesch
+# QuantBio2019 workshop in Fiesch
 
-This R workflow is written in R and takes advantage of RStudio notebooks. Please download the latest RStudio from [here](https://www.rstudio.com/products/rstudio/download/#download).
+Presentation, the code, and exercises to accompany the [QuantBio workshop](http://quantbio2019.epfl.ch) in Fiesch, 15-20 September, 2019.
+
+## File description
+
+- `presentation-intro.pdf` introductory presentation with background information.
+- `presentation-main.Rpres` and `html` R presentation with workshop lecture and exercises.
+- `analysis-student.Rmd` R notebook with the analysis for exercises. Contains the code with placeholders to fill in during the workshop. Can be compiled (in Rstudio) to a final `html` document.
+- `analysis-main.Rmd` and `html`. R notebook with full analysis from raw data to plots. The associated `html` file contains a final document with code and results.
+- `data` folder with raw in intermediate data files.
+
+## Required packages
+
+The workflow is written in R and takes advantage of RStudio notebooks. Please download the latest RStudio from [here](https://www.rstudio.com/products/rstudio/download/#download).
 
 The analysis uses the following packages that need to be present in your RStudio installation:
 
