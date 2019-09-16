@@ -206,6 +206,14 @@ dtAll = dtAll[... %in% ...]
 rm(vsTrackOut)
 ```
 
+# Interactive removal of outliers
+
+There's no single recipe for handling outliers; it all depends on the analysis.
+
+A handy interactive tool written by Mauro Gwerder (a Bachelor student in Olivier Pertz lab) can help with that process. The R/Shiny app can be downloaded from [here](https://github.com/maurogwerder/Outlier_app) and executed from RStudio.
+
+![Outlier App GUI](presentation-images/gui-outlierapp.png)
+
 # Milestone 3
 
 Dataset without outliers from **Milestone 3**:
@@ -663,7 +671,7 @@ factoextra::fviz_nbclust(mAllWide, hcut, method = "silhouette") +
 
 ## Optimal number of clusters - Gap statistics method
 
-```{r, fig.align='center'}
+```{r, fig.align='center', cache.lazy=T}
 # Gap statistic
 # nboot = 10 to keep the function speedy. 
 # recommended value: nboot= 500 for your analysis.
@@ -678,7 +686,7 @@ factoextra::fviz_nbclust(mAllWide, hcut, method = "gap_stat",
 
 We’ll use the package `NbClust` which will compute, with a single function call, 30 indices for deciding the right number of clusters in the dataset:
 
-```{r, message = F}
+```{r, message = F, cache.lazy=T}
 require(NbClust)
 nb <- NbClust(mAllWide, 
               distance = "euclidean", 
@@ -716,5 +724,9 @@ factoextra::fviz_silhouette(hc.res)
 
 # Interactive clustering
 
-A free R/Shiny app available [here](https://github.com/dmattek/shiny-timecourse-inspector).
+A free R/Shiny app developed in Olivier Pertz lab available from [here](https://github.com/dmattek/shiny-timecourse-inspector).
 
+![TCI App GUI](presentation-images/gui-tci.png)
+
+
+<img src="./presentation-images/gui-tci.png"; style="max-width:800px;float:center;">
